@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SlushBlitz</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; overscroll-behavior: none; }
+        .game-board { display: grid; touch-action: none; position: relative; }
+        .game-item-cell { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: relative; }
+        .game-item { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.3s ease, opacity 0.3s ease; user-select: none; font-size: clamp(1.5rem, 4.5vw, 2.2rem); line-height: 1; z-index: 10; }
+        .game-item.selected { transform: scale(1.1); background-color: rgba(255, 255, 0, 0.3); border-radius: 10px; }
+        .game-item.hint { animation: hint-pulse 1s infinite; }
+        @keyframes hint-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }
+        .game-item.clearing { animation: clear-item 0.5s forwards; }
+        @keyframes clear-item { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.5; } 100% { transform: scale(0); opacity: 0; } }
+        .modal { transition: opacity 0.3s ease, visibility 0.3s ease; }
+        .modal-content { transition: transform 0.3s ease; }
+        .modal.open { opacity: 1; visibility: visible; }
+        .modal.open .modal-content { transform: scale(1) translateY(0); }
+        .striped-h span { text-decoration: line-through; text-decoration-color: rgba(255,255,255,0.7); text-decoration-thickness: 3px; }
+        .striped-v span { position: relative; }
+        .striped-v span::before { content: ''; position: absolute; left: 50%; top: 10%; bottom: 10%; width: 3px; background-color: rgba(255,255,255,0.7); transform: translateX(-50%); border-radius: 2px; }
+        .wrapped span { animation: wrapped-pulse-emoji 0.7s infinite alternate; padding: 2px; }
+        @keyframes wrapped-pulse-emoji { from { text-shadow: 0 0 5px rgba(255,223,186,0.7), 0 0 8px rgba(255,223,186,0.7); } to { text-shadow: 0 0 15px rgba(255,223,186,1), 0 0 20px rgba(255,223,186,1); } }
+        .color-bomb span { animation: color-bomb-pulse 1s infinite; }
+        @keyframes color-bomb-pulse { 0% { text-shadow: 0 0 5px #ff0000, 0 0 7px #ff0000; } 16% { text-shadow: 0 0 5px #ff7f00, 0 0 7px #ff7f00; } 33% { text-shadow: 0 0 5px #ffff00, 0 0 7px #ffff00; } 50% { text-shadow: 0 0 5px #00ff00, 0 0 7px #00ff00; } 66% { text-shadow: 0 0 5px #0000ff, 0 0 7px #0000ff; } 83% { text-shadow: 0 0 5px #4b0082, 0 0 7px #4b0082; } 100% { text-shadow: 0 0 5px #8f00ff, 0 0 7px #8f00ff; } }
+        .progress-bar-container { background-color: #e0e0e0; border-radius: 0.5rem; overflow: hidden; height: 20px; }
+        .progress-bar { background-color: #4caf50; height: 100%; transition: width 0.5s ease-in-out; text-align: center; color: white; font-size: 0.75rem; line-height: 20px; }
+        .level-select-grid::-webkit-scrollbar { width: 8px; }
+        .level-select-grid::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        .level-select-grid::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+        .level-select-grid::-webkit-scrollbar-thumb:hover { background: #555; }
+        .level-button.locked { filter: grayscale(100%); cursor: not-allowed; }
+        #storage-mode-indicator { position: fixed; top: 10px; right: 10px; background-color: rgba(0,0,0,0.5); color: white; padding: 5px 10px; border-radius: 5px; font-size: 0.8rem; z-index: 100; }
+        .confetti-particle { position: fixed; pointer-events: none; opacity: 0; transition: transform 1s ease-out, opacity 1s ease-out; z-index: 1000; }
+        #theme-selector-container { margin-top: 1rem; margin-bottom: 0.5rem; display: flex; justify-content: center; align-items: center; gap: 0.5rem; }
+        #item-theme-selector { background-color: rgba(0,0,0,0.3); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 0.375rem; padding: 0.5rem; font-size: 0.875rem; }
+        .screen-shake { animation: shake 0.3s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-3px, 0, 0); } 40%, 60% { transform: translate3d(3px, 0, 0); } }
+        .booster-button { background-color: rgba(76, 175, 80, 0.7); border: 1px solid rgba(255,255,255,0.4); }
+        .booster-button:hover:not(:disabled) { background-color: rgba(76, 175, 80, 1); }
+        .booster-button:disabled { background-color: rgba(128, 128, 128, 0.5); cursor: not-allowed; opacity: 0.7; }
+        #boosters-panel { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.2); }
+        .jelly-layer-1::before { content: ''; position: absolute; inset: 5%; background-color: rgba(173, 216, 230, 0.4); border-radius: 8px; z-index: 1; box-shadow: inset 0 0 5px rgba(0,0,0,0.2); }
+        .jelly-layer-2::before { content: ''; position: absolute; inset: 5%; background-color: rgba(173, 216, 230, 0.7); border-radius: 8px; z-index: 1; box-shadow: inset 0 0 8px rgba(0,0,0,0.3); border: 1px solid rgba(100,150,200,0.5); }
+        #gems-display-container { text-align: center; margin-bottom: 0.5rem; font-weight: bold; }
+        .chained::after { content: '🔗'; position: absolute; font-size: 1.2em; color: #aaa; opacity: 0.8; z-index: 15; text-shadow: 0 0 3px black; animation: chain-pulse 1.5s infinite ease-in-out; }
+        @keyframes chain-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+        .chocolate-layer::before { content: ''; position: absolute; inset: 3%; background-color: rgba(79, 53, 38, 0.85); border-radius: 8px; z-index: 12; box-shadow: inset 0 0 6px rgba(0,0,0,0.4); border: 1px solid rgba(50,30,20,0.6); animation: chocolate-appear 0.3s ease-out; }
+        @keyframes chocolate-appear { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
+        .chocolate-spawner::after { content: '🍫🏭'; position: absolute; font-size: 0.8em; color: #D2691E; opacity: 0.9; z-index: 16; bottom: 2px; right: 2px; text-shadow: 0 0 2px black; }
+        .licorice-swirl-cell::before { content: '🌀'; position: absolute; font-size: 1.8em; color: #4A3B31; z-index: 13; text-shadow: 0 0 3px rgba(0,0,0,0.5); animation: licorice-pulse 2.5s infinite ease-in-out; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+        @keyframes licorice-pulse { 0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.9; } 50% { transform: scale(1.03) rotate(-3deg); opacity: 1; } }
+
+        .ingredient-item span { font-size: 1.1em; } 
+        .collection-row-indicator { background-color: rgba(255, 215, 0, 0.2); }
+        .hammer-active { cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="%23FFD700" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 2.5a2.5 2.5 0 0 0-3.5 0L8.5 6H4a2 2 0 0 0-2 2v3.5a2 2 0 0 0 2 2h2.8l-1.3 1.3a2.5 2.5 0 1 0 3.5 3.5L13 15.3V18a2 2 0 0 0 2 2h3.5a2 2 0 0 0 2-2v-3.5a2 2 0 0 0-2-2h-2.8l1.3-1.3a2.5 2.5 0 0 0-3.5-3.5z"></path></svg>') 16 16, crosshair !important; }
+        .striped-brush-active { cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="goldenrod" stroke="black" stroke-width="1"><path d="M12.67 18.77l-1.53-1.53L18.07 10.3l1.53 1.53-6.93 6.94zm2.09-8.55L9.6 15.38l-1.56-1.56L13.2 8.67l1.56 1.55zM6.41 19.93c-.78.78-2.05.78-2.83 0s-.78-2.05 0-2.83L13.17 7.5l2.83 2.83L6.41 19.93zM4.8 21H8v-3.2L4.8 21z"/></svg>') 16 16, crosshair !important; }
+
+        #tutorial-modal { z-index: 60; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-purple-600 to-pink-500 min-h-screen flex flex-col items-center justify-center p-2 sm:p-4 text-white overflow-hidden">
+    <div id="loading-screen" class="fixed inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center z-50">
+        <div class="text-white text-3xl mb-4">Loading SlushBlitz...</div>
+        <div class="w-16 h-16 border-4 border-t-pink-500 border-r-purple-500 border-b-pink-500 border-l-purple-500 rounded-full animate-spin"></div>
+        <div id="auth-status" class="mt-4 text-sm text-gray-300">Initializing...</div>
+    </div>
+
+    <div id="app-container" class="w-full max-w-4xl mx-auto hidden">
+        <div id="storage-mode-indicator" class="hidden"></div>
+        <header class="mb-2 sm:mb-4 text-center">
+            <h1 class="text-3xl sm:text-4xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-yellow-300 via-pink-400 to-red-400">SlushBlitz</h1>
+            <p id="user-id-display" class="text-xs text-gray-300 mt-1"></p>
+        </header>
+
+        <div class="flex flex-col lg:flex-row gap-4">
+            <div class="lg:w-1/3 bg-black bg-opacity-30 p-3 sm:p-4 rounded-xl shadow-2xl order-2 lg:order-1">
+                <div id="level-select-screen">
+                    <h2 class="text-2xl font-semibold mb-1 text-center">Select Level</h2>
+                    <div id="gems-display-container">💎 Gems: <span id="player-gems-display">0</span></div>
+                    <div id="theme-selector-container">
+                        <label for="item-theme-selector" class="text-sm">Theme:</label>
+                        <select id="item-theme-selector" class="bg-gray-700 text-white border border-gray-600 rounded px-2 py-1 text-sm">
+                            <option value="fruits">Fruits 🍓</option>
+                            <option value="sweets">Sweets 🍬</option>
+                            <option value="gems">Gems 💎</option>
+                            <option value="desserts">Desserts 🍰</option>
+                        </select>
+                    </div>
+                    <div id="level-select-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-80 overflow-y-auto p-1">
+                    </div>
+                </div>
+
+                <div id="game-info-screen" class="hidden">
+                    <h2 class="text-xl sm:text-2xl font-semibold mb-1">Level <span id="current-level-display">1</span></h2>
+                    <div id="gems-display-game-screen" class="text-center text-sm mb-2">💎 Gems: <span id="player-gems-game-display">0</span></div>
+                    
+                    <div class="mb-2">
+                        <div class="flex justify-between text-sm font-medium"><span>Score</span><span id="score-display">0</span></div>
+                        <div class="progress-bar-container mt-1"><div id="score-progress-bar" class="progress-bar" style="width: 0%;"></div></div>
+                        <p class="text-xs text-center mt-0.5">Target: <span id="target-score-display">0</span></p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="flex justify-between text-sm font-medium"><span>Moves</span><span id="moves-display">0</span></div>
+                    </div>
+                    
+                    <div id="objectives-container" class="mb-3 space-y-1"><h3 class="text-md font-semibold">Objectives:</h3></div>
+                    
+                    <div id="boosters-panel" class="space-y-2 mb-3">
+                        <h3 class="text-md font-semibold text-center">Boosters</h3>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="booster-extra-moves" class="booster-button text-xs py-2 px-1 rounded-lg shadow-md transition duration-150"><i class="fas fa-plus-circle mr-1"></i>+3 Moves (<span id="extra-moves-count">0</span>)</button>
+                            <button id="booster-shuffle" class="booster-button text-xs py-2 px-1 rounded-lg shadow-md transition duration-150"><i class="fas fa-random mr-1"></i>Shuffle (<span id="shuffle-booster-count">0</span>)</button>
+                            <button id="booster-hammer" class="booster-button text-xs py-2 px-1 rounded-lg shadow-md transition duration-150"><i class="fas fa-hammer mr-1"></i>Hammer (<span id="hammer-booster-count">0</span>)</button>
+                            <button id="booster-striped-brush" class="booster-button text-xs py-2 px-1 rounded-lg shadow-md transition duration-150"><i class="fas fa-paint-brush mr-1"></i>Brush (<span id="striped-brush-count">0</span>)</button>
+                            <button id="booster-start-color-bomb" class="booster-button text-xs py-2 px-1 rounded-lg shadow-md transition duration-150" title="Activate before level start (Feature WIP)" disabled><i class="fas fa-bomb mr-1"></i>Start Bomb (<span id="start-color-bomb-count">0</span>)</button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex flex-col space-y-2">
+                         <button id="restart-level-button" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 flex items-center justify-center"><i class="fas fa-redo mr-2"></i>Restart Level</button>
+                        <button id="back-to-levels-button" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 flex items-center justify-center"><i class="fas fa-arrow-left mr-2"></i>Back to Levels</button>
+                        <button id="toggle-sound-button" class="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 flex items-center justify-center"><i id="sound-icon" class="fas fa-volume-up mr-2"></i><span id="sound-text">Sound On</span></button>
+                         <button id="hint-button" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 flex items-center justify-center"><i class="fas fa-lightbulb mr-2"></i>Get Hint</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:w-2/3 aspect-square bg-black bg-opacity-40 p-2 sm:p-3 rounded-xl shadow-2xl order-1 lg:order-2 flex items-center justify-center">
+                <div id="game-board" class="game-board w-full h-full">
+                </div>
+            </div>
+        </div>
+
+        <div id="notification-bar" class="fixed bottom-0 left-0 right-0 bg-gray-800 text-white p-3 text-center transform translate-y-full transition-transform duration-300 ease-in-out z-30">Notification message</div>
+    </div>
+
+    <div id="game-modal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 opacity-0 invisible z-40">
+        <div class="modal-content bg-gradient-to-br from-purple-700 to-pink-600 p-6 sm:p-8 rounded-xl shadow-2xl text-center w-full max-w-md transform scale-95 -translate-y-10">
+            <h3 id="modal-title" class="text-2xl sm:text-3xl font-bold mb-4">Modal Title</h3>
+            <p id="modal-message" class="text-lg mb-6">Modal message goes here.</p>
+            <div id="modal-stats" class="mb-6 text-left">
+            </div>
+            <div id="modal-actions-container" class="flex flex-col sm:flex-row justify-center gap-3">
+                <button id="modal-action-primary" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition duration-150">Primary Action</button>
+                <button id="modal-action-secondary" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition duration-150">Secondary Action</button>
+            </div>
+             <div id="stripe-choice-container" class="hidden mt-4 space-x-3">
+                <button id="stripe-choice-h" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded">Horizontal Stripe</button>
+                <button id="stripe-choice-v" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded">Vertical Stripe</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="tutorial-modal" class="modal fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 opacity-0 invisible">
+        <div class="modal-content bg-gradient-to-br from-indigo-700 to-blue-600 p-6 sm:p-8 rounded-xl shadow-2xl text-center w-full max-w-lg transform scale-95 -translate-y-10">
+            <h3 id="tutorial-modal-title" class="text-2xl font-bold mb-3">Tutorial</h3>
+            <p id="tutorial-modal-message" class="text-md mb-5"></p>
+            <button id="tutorial-modal-close" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-5 rounded-lg shadow-lg transition duration-150">Got it!</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, enableNetwork, collection, addDoc, query, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        const BOARD_SIZE = 8;
+        const ALL_ITEM_THEMES = {
+            fruits: [ { id: 'red', display: '🍓' }, { id: 'blue', display: '🫐' }, { id: 'green', display: '🍏' }, { id: 'yellow', display: '🍌' }, { id: 'purple', display: '🍇' }, { id: 'orange', display: '🍊' } ],
+            sweets: [ { id: 'red', display: '🍬' }, { id: 'blue', display: '🍭' }, { id: 'green', display: '🟢' }, { id: 'yellow', display: '🟡' }, { id: 'purple', display: '💜' }, { id: 'orange', display: '🟠' } ],
+            gems:   [ { id: 'red', display: '❤️' }, { id: 'blue', display: '💎' }, { id: 'green', display: '💚' }, { id: 'yellow', display: '⭐' }, { id: 'purple', display: '💠' }, { id: 'orange', display: '🔶' } ],
+            desserts:[ { id: 'red', display: '🍰' }, { id: 'blue', display: '🧁' }, { id: 'green', display: '🍩' }, { id: 'yellow', display: '🍪' }, { id: 'purple', display: '🍦' }, { id: 'orange', display: '🍮' } ]
+        };
+        const INGREDIENT_TYPES = {
+            CHERRY: { id: 'cherry', display: '🍒', type: 'ingredient' },
+            HAZELNUT: { id: 'hazelnut', display: '🌰', type: 'ingredient' }
+        };
+        const OBSTACLE_TYPES = {
+            CHOCOLATE: { id: 'chocolate', display: '🍫' },
+            LICORICE_SWIRL: { id: 'licorice', display: '🌀', type: 'blocker' } // New Obstacle
+        };
+
+        let currentItemThemeKey = 'fruits'; 
+        let ITEM_TYPES = ALL_ITEM_THEMES[currentItemThemeKey];
+        const SPECIAL_ITEM_TYPES = { STRIPED_H: 'striped-h', STRIPED_V: 'striped-v', WRAPPED: 'wrapped', COLOR_BOMB: 'color-bomb' };
+        const GEMS_FOR_CONTINUE = 10;
+        const MOVES_FOR_CONTINUE = 5;
+
+        const LEVELS = [ 
+            { level: 1, moves: 20, targetScore: 1000, objectives: [{ type: 'score', value: 1000 }], tutorial: 'welcome_level1' },
+            { level: 2, moves: 15, targetScore: 2500, 
+              objectives: [{ type: 'score', value: 2500 }, { type: 'clearColor', itemType: 'blue', count: 10 }],
+              jelly: [ [0,0,0,0,0,0,0,0], [0,0,1,1,1,1,0,0], [0,0,1,2,2,1,0,0], [0,0,1,2,2,1,0,0], [0,0,1,1,1,1,0,0], [0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0] ], 
+              tutorial: 'jelly_intro' },
+            { level: 3, moves: 25, targetScore: 5000, 
+              objectives: [{ type: 'score', value: 5000 }, { type: 'createSpecial', count: 1, specialType: SPECIAL_ITEM_TYPES.WRAPPED }, { type: 'clearAllJelly' }] ,
+              jelly: Array(BOARD_SIZE).fill(0).map(() => Array(BOARD_SIZE).fill(1)), 
+              tutorial: 'wrapped_intro' },
+            { level: 4, moves: 30, targetScore: 1000, 
+              objectives: [{type: 'collectIngredients', ingredients: [{typeId: 'CHERRY', count: 2}]}], 
+              chains: [[0,0,0,1,1,0,0,0],[0,0,1,0,0,1,0,0],[0,1,0,0,0,0,1,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0]], 
+              tutorial: 'ingredients_chains_intro' },
+            { level: 5, moves: 35, targetScore: 10000, 
+              objectives: [{ type: 'score', value: 10000 }, { type: 'createSpecial', count: 1, specialType: SPECIAL_ITEM_TYPES.COLOR_BOMB }], 
+              tutorial: 'colorbomb_intro' },
+            { level: 6, moves: 25, targetScore: 7000, 
+              objectives: [{type: 'clearChocolate', count: 10}], 
+              initialChocolate: [ [0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0], [0,0,1,1,1,1,0,0], [0,0,1,0,0,1,0,0], [0,0,1,1,1,1,0,0], [0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0] ],
+              chocolateSpawners: [{r: 0, c: 3}, {r: 0, c: 4}], 
+              tutorial: 'chocolate_intro'
+            },
+             { level: 7, moves: 28, targetScore: 8000, 
+              objectives: [{type: 'collectIngredients', ingredients: [{typeId: 'HAZELNUT', count: 1}, {typeId: 'CHERRY', count: 1}]}, {type: 'clearAllJelly'}], 
+              jelly: Array(BOARD_SIZE).fill(0).map((_, r) => Array(BOARD_SIZE).fill(r % 2 === 0 ? 1: 0)),
+              chains: [[1,1,1,0,0,1,1,1],[1,0,0,0,0,0,0,1],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[1,0,0,0,0,0,0,1],[1,1,1,0,0,1,1,1]],
+            },
+            { level: 8, moves: 30, targetScore: 6000,
+              objectives: [{type: 'clearLicorice', count: 8}],
+              initialLicorice: [ [0,0,0,0,0,0,0,0], [0,1,0,1,0,1,0,1], [0,0,0,0,0,0,0,0], [1,0,1,0,1,0,1,0], [0,0,0,0,0,0,0,0], [0,1,0,1,0,1,0,1], [0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0] ],
+              tutorial: 'licorice_intro'
+            }
+        ];
+        const MAX_LEVEL = LEVELS.length;
+        let db, auth, userId;
+        let board = [], boardJelly = [], boardChains = [], boardChocolate = [], boardLicorice = []; // Added boardLicorice
+        let score = 0, movesLeft = 0, currentLevel = 1, currentLevelData = {};
+        let playerProgress = { 
+            boosters: { extraMoves: 2, shuffle: 2, hammer: 1, stripedBrush: 1, startColorBomb: 1 }, // Added startColorBomb booster
+            gems: 20, 
+            lastLoginDate: null, 
+            tutorialsShown: {} 
+        };
+        let objectivesProgress = {}, selectedItem = null;
+        let isSwapping = false, isCascading = false, soundEnabled = true, useLocalStorage = false;
+        let synths = {}, hintTimeout = null;
+        let boostersUsedThisLevel = { extraMoves: false, shuffle: false, hammer: false, stripedBrush: false, startColorBomb: false }; // Added startColorBomb
+        let continueUsedThisLevel = false;
+        let hammerBoosterActive = false;
+        let stripedBrushActive = false;
+        let stripedBrushTarget = null;
+
+        const loadingScreen = document.getElementById('loading-screen');
+        const authStatusEl = document.getElementById('auth-status');
+        const appContainer = document.getElementById('app-container');
+        const userIdDisplay = document.getElementById('user-id-display');
+        const gameBoardElement = document.getElementById('game-board');
+        const scoreDisplay = document.getElementById('score-display');
+        const scoreProgressBar = document.getElementById('score-progress-bar');
+        const targetScoreDisplay = document.getElementById('target-score-display');
+        const movesDisplay = document.getElementById('moves-display');
+        const currentLevelDisplay = document.getElementById('current-level-display');
+        const objectivesContainer = document.getElementById('objectives-container');
+        const notificationBar = document.getElementById('notification-bar');
+        const levelSelectScreen = document.getElementById('level-select-screen');
+        const gameInfoScreen = document.getElementById('game-info-screen');
+        const levelSelectGrid = document.getElementById('level-select-grid');
+        const modalElement = document.getElementById('game-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalStats = document.getElementById('modal-stats');
+        const modalActionsContainer = document.getElementById('modal-actions-container');
+        const modalActionPrimary = document.getElementById('modal-action-primary');
+        const modalActionSecondary = document.getElementById('modal-action-secondary');
+        const stripeChoiceContainer = document.getElementById('stripe-choice-container');
+        const stripeChoiceHButton = document.getElementById('stripe-choice-h');
+        const stripeChoiceVButton = document.getElementById('stripe-choice-v');
+        const soundIcon = document.getElementById('sound-icon');
+        const soundText = document.getElementById('sound-text');
+        const storageModeIndicator = document.getElementById('storage-mode-indicator');
+        const itemThemeSelector = document.getElementById('item-theme-selector');
+        const boosterExtraMovesButton = document.getElementById('booster-extra-moves');
+        const boosterShuffleButton = document.getElementById('booster-shuffle');
+        const boosterHammerButton = document.getElementById('booster-hammer');
+        const boosterStripedBrushButton = document.getElementById('booster-striped-brush');
+        const boosterStartColorBombButton = document.getElementById('booster-start-color-bomb'); // New booster button
+        const extraMovesCountDisplay = document.getElementById('extra-moves-count');
+        const shuffleBoosterCountDisplay = document.getElementById('shuffle-booster-count');
+        const hammerBoosterCountDisplay = document.getElementById('hammer-booster-count');
+        const stripedBrushCountDisplay = document.getElementById('striped-brush-count');
+        const startColorBombCountDisplay = document.getElementById('start-color-bomb-count'); // New booster count display
+        const playerGemsDisplay = document.getElementById('player-gems-display');
+        const playerGemsGameDisplay = document.getElementById('player-gems-game-display');
+        const tutorialModalElement = document.getElementById('tutorial-modal');
+        const tutorialModalTitle = document.getElementById('tutorial-modal-title');
+        const tutorialModalMessage = document.getElementById('tutorial-modal-message');
+        const tutorialModalCloseButton = document.getElementById('tutorial-modal-close');
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'candy-crush-pro-dev';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "YOUR_API_KEY", authDomain: "YOUR_PROJECT_ID.firebaseapp.com", projectId: "YOUR_PROJECT_ID", storageBucket: "YOUR_PROJECT_ID.appspot.com", messagingSenderId: "YOUR_SENDER_ID", appId: "YOUR_APP_ID" };
+        
+        function isPlaceholderConfig(config) { return !config.apiKey || config.apiKey.includes("YOUR_API_KEY") || config.projectId.includes("YOUR_PROJECT_ID"); }
+        
+        async function initializeFirebase() {
+            authStatusEl.textContent = 'Initializing...';
+            if (isPlaceholderConfig(firebaseConfig) || typeof __firebase_config === 'undefined') {
+                useLocalStorage = true; authStatusEl.textContent = 'Offline Mode (Local Storage)'; storageModeIndicator.textContent = 'Offline Mode'; storageModeIndicator.classList.remove('hidden');
+                await loadPlayerProgressAndSettings(); showLevelSelectScreen(); loadingScreen.style.display = 'none'; appContainer.style.display = 'block'; return;
+            }
+            try {
+                authStatusEl.textContent = 'Initializing Firebase...'; const app = initializeApp(firebaseConfig); db = getFirestore(app); auth = getAuth(app); setLogLevel('debug');
+                try { await getDoc(doc(db, `_test_connection/${appId}`)); enableNetwork(db); }
+                catch (e) { useLocalStorage = true; if (auth && auth.app) await deleteApp(auth.app).catch(err => console.error("Error deleting app:", err)); db = null; auth = null; }
+                if (useLocalStorage) {
+                    authStatusEl.textContent = 'Offline Mode (Local Storage)'; storageModeIndicator.textContent = 'Offline Mode'; storageModeIndicator.classList.remove('hidden');
+                    await loadPlayerProgressAndSettings(); showLevelSelectScreen(); loadingScreen.style.display = 'none'; appContainer.style.display = 'block'; return;
+                }
+                storageModeIndicator.textContent = 'Online Mode (Firebase)'; storageModeIndicator.classList.remove('hidden'); authStatusEl.textContent = 'Authenticating...';
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid; authStatusEl.textContent = `Authenticated: ${userId.substring(0,8)}...`; userIdDisplay.textContent = `Player ID: ${userId}`;
+                        await loadPlayerProgressAndSettings(); showLevelSelectScreen(); loadingScreen.style.display = 'none'; appContainer.style.display = 'block';
+                    } else {
+                         authStatusEl.textContent = 'Authentication needed...';
+                         if (!auth.currentUser) {
+                            try { 
+                                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) { await signInWithCustomToken(auth, __initial_auth_token); } 
+                                else { await signInAnonymously(auth); } 
+                            }
+                            catch (err) {
+                                console.error("Firebase Auth Error:", err);
+                                useLocalStorage = true; authStatusEl.textContent = 'Offline Mode (Sign-in Failed)'; storageModeIndicator.textContent = 'Offline Mode';
+                                if (auth && auth.app) await deleteApp(auth.app).catch(delErr => console.error("Error deleting app on auth fail:", delErr)); db = null; auth = null;
+                                await loadPlayerProgressAndSettings(); showLevelSelectScreen(); loadingScreen.style.display = 'none'; appContainer.style.display = 'block';
+                            }
+                         }
+                    }
+                });
+                if (!auth.currentUser && (typeof __initial_auth_token !== 'undefined' && __initial_auth_token)) { try { await signInWithCustomToken(auth, __initial_auth_token); } catch (e) {console.error("Initial custom token sign-in failed:", e)} }
+                else if (!auth.currentUser) { try { await signInAnonymously(auth); } catch (e) {console.error("Initial anonymous sign-in failed:", e)} }
+            } catch (error) {
+                console.error("Firebase Initialization Error:", error);
+                useLocalStorage = true; authStatusEl.textContent = 'Offline Mode (Init Error)'; storageModeIndicator.textContent = 'Offline Mode';
+                if (auth && auth.app) await deleteApp(auth.app).catch(err => console.error("Error deleting app on init error:", err)); db = null; auth = null;
+                await loadPlayerProgressAndSettings(); showLevelSelectScreen(); loadingScreen.style.display = 'none'; appContainer.style.display = 'block';
+            }
+        }
+
+        function setupSounds() { 
+            const createSynth = (vol = -10) => new Tone.PolySynth(Tone.Synth, { oscillator: { type: "triangle8" }, envelope: { attack: 0.02, decay: 0.1, sustain: 0.3, release: 0.5 }, volume: vol }).toDestination();
+            synths.swap = createSynth(); synths.match3 = createSynth(); synths.match4 = createSynth(); synths.match5 = createSynth(); synths.specialCreate = createSynth(-5);
+            synths.specialActivate = createSynth(-3); synths.cascade = createSynth(-15); synths.levelComplete = createSynth(); synths.gameOver = createSynth(); synths.click = createSynth(-8);
+            synths.booster = createSynth(-5); synths.bigExplosion = createSynth(0); synths.jellyClear = createSynth(-12); synths.chainBreak = createSynth(-10); synths.ingredientCollect = createSynth(-5);
+            synths.chocolateClear = createSynth(-12); synths.chocolateSpread = createSynth(-18);
+            synths.licoriceClear = createSynth(-10); // New sound for licorice
+        }
+        function playSound(type, note, duration = "16n") { 
+            if (!soundEnabled || !synths[type] || !Tone.context || Tone.context.state !== 'running') return;
+            try {
+                if (type === 'swap') synths.swap.triggerAttackRelease(note || "C4", duration); else if (type === 'match3') synths.match3.triggerAttackRelease(note || "E4", duration);
+                else if (type === 'match4') synths.match4.triggerAttackRelease(note || ["G4", "C5"], duration); else if (type === 'match5') synths.match5.triggerAttackRelease(note || ["C5", "E5", "G5"], duration);
+                else if (type === 'specialCreate') synths.specialCreate.triggerAttackRelease(note || "A5", "8n"); else if (type === 'specialActivate') synths.specialActivate.triggerAttackRelease(note || "C6", "4n");
+                else if (type === 'cascade') synths.cascade.triggerAttackRelease(note || "D3", "32n", Tone.now() + Math.random() * 0.1); else if (type === 'levelComplete') synths.levelComplete.triggerAttackRelease(["C4", "E4", "G4", "C5"], "2n");
+                else if (type === 'gameOver') synths.gameOver.triggerAttackRelease(["C3", "G2", "E2", "C2"], "1n"); else if (type === 'click') synths.click.triggerAttackRelease(note || "F5", "32n");
+                else if (type === 'booster') synths.booster.triggerAttackRelease(note || "B5", "8n"); else if (type === 'bigExplosion') synths.bigExplosion.triggerAttackRelease(note || ["A2", "E3", "A3"], "2n");
+                else if (type === 'jellyClear') synths.jellyClear.triggerAttackRelease(note || "G3", "16n"); else if (type === 'chainBreak') synths.chainBreak.triggerAttackRelease(note || "F#3", "16n");
+                else if (type === 'ingredientCollect') synths.ingredientCollect.triggerAttackRelease(note || "D5", "8n");
+                else if (type === 'chocolateClear') synths.chocolateClear.triggerAttackRelease(note || "A3", "16n"); else if (type === 'chocolateSpread') synths.chocolateSpread.triggerAttackRelease(note || "C2", "8n");
+                else if (type === 'licoriceClear') synths.licoriceClear.triggerAttackRelease(note || "D#3", "16n"); // New sound
+            } catch (error) { console.warn("Tone.js playSound error:", error); }
+        }
+        document.getElementById('toggle-sound-button').addEventListener('click', () => { 
+            soundEnabled = !soundEnabled; if (soundEnabled && Tone.context.state !== 'running') { Tone.start().catch(e => console.warn("Tone.start() failed:", e)); }
+            updateSoundButtonUI(); savePlayerSettings(); playSound('click');
+        });
+
+        function initializeBoardObstacles() {
+            boardJelly = []; boardChains = []; boardChocolate = []; boardLicorice = []; // Initialize licorice board
+            const levelJellyData = currentLevelData.jelly || [];
+            const levelChainData = currentLevelData.chains || [];
+            const levelInitialChocolate = currentLevelData.initialChocolate || [];
+            const levelInitialLicorice = currentLevelData.initialLicorice || []; // Get licorice data
+
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                boardJelly[r] = []; boardChains[r] = []; boardChocolate[r] = []; boardLicorice[r] = []; // Init licorice row
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    boardJelly[r][c] = levelJellyData[r] ? (levelJellyData[r][c] || 0) : 0;
+                    boardChains[r][c] = levelChainData[r] ? (levelChainData[r][c] || 0) : 0;
+                    boardChocolate[r][c] = levelInitialChocolate[r] ? (levelInitialChocolate[r][c] || 0) : 0;
+                    boardLicorice[r][c] = levelInitialLicorice[r] ? (levelInitialLicorice[r][c] || 0) : 0; // Populate licorice
+                }
+            }
+        }
+        
+        function createBoard() {  
+            board = []; 
+            initializeBoardObstacles();
+
+            const levelIngredientObjective = currentLevelData.objectives.find(obj => obj.type === 'collectIngredients');
+            const levelIngredientData = levelIngredientObjective ? levelIngredientObjective.ingredients : [];
+            let ingredientsToPlace = [];
+            if (levelIngredientData) {
+                levelIngredientData.forEach(ing => { 
+                    const ingDefinition = INGREDIENT_TYPES[ing.typeId.toUpperCase()];
+                    if (ingDefinition) {
+                        for(let i=0; i < ing.count; i++) ingredientsToPlace.push(ingDefinition.id); 
+                    }
+                });
+            }
+            
+            for (let r = 0; r < BOARD_SIZE; r++) { 
+                board[r] = [];
+                for (let c = 0; c < BOARD_SIZE; c++) { 
+                    if (boardChocolate[r][c] || boardLicorice[r][c]) { // If chocolate OR licorice, cell is initially empty of items
+                        board[r][c] = null;
+                    } else if (r === 0 && ingredientsToPlace.length > 0 && c % Math.floor(BOARD_SIZE / (levelIngredientData.reduce((s,ig)=>s+ig.count,0) || 1) +1) === 0 ) {
+                        const ingTypeId = ingredientsToPlace.shift();
+                        const ingDefinition = Object.values(INGREDIENT_TYPES).find(it => it.id === ingTypeId);
+                        board[r][c] = { typeId: ingDefinition.id, special: null, isIngredient: true, display: ingDefinition.display };
+                    } else { 
+                        board[r][c] = getRandomItem(); 
+                    }
+                } 
+            }
+            while (hasInitialMatches()) { 
+                for (let r = 0; r < BOARD_SIZE; r++) { 
+                    for (let c = 0; c < BOARD_SIZE; c++) { 
+                        if(!board[r][c]?.isIngredient && !boardChocolate[r][c] && !boardLicorice[r][c]) { // Don't replace ingredients or items under obstacles
+                            board[r][c] = getRandomItem(); 
+                        }
+                    } 
+                } 
+            }
+        }
+        function getRandomItem() { const type = ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)]; return { typeId: type.id, special: null, isIngredient: false }; }
+        function getItemVisuals(item) { 
+            if (item.isIngredient) return { display: item.display || INGREDIENT_TYPES[item.typeId.toUpperCase()]?.display || '❓', classes: 'ingredient-item' };
+            const baseItem = ITEM_TYPES.find(it => it.id === item.typeId); if (!baseItem) return { display: '❓', classes: '' }; 
+            let classes = ''; if (item.special) { classes += `${item.special} `; } return { display: baseItem.display, classes };
+        }
+        function renderBoard(animate = false) { 
+            gameBoardElement.innerHTML = ''; gameBoardElement.style.gridTemplateColumns = `repeat(${BOARD_SIZE}, 1fr)`; gameBoardElement.style.gridTemplateRows = `repeat(${BOARD_SIZE}, 1fr)`;
+            const collectionRow = currentLevelData.objectives.find(obj => obj.type === 'collectIngredients') ? BOARD_SIZE -1 : -1;
+
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const item = board[r][c]; 
+                    const cellWrapper = document.createElement('div'); cellWrapper.classList.add('game-item-cell', 'aspect-square');
+                    cellWrapper.dataset.r = r; cellWrapper.dataset.c = c; 
+                    
+                    if (boardJelly[r] && boardJelly[r][c] > 0) cellWrapper.classList.add(`jelly-layer-${boardJelly[r][c]}`);
+                    if (boardChains[r] && boardChains[r][c] > 0) cellWrapper.classList.add('chained');
+                    if (boardChocolate[r] && boardChocolate[r][c] > 0) cellWrapper.classList.add('chocolate-layer');
+                    if (boardLicorice[r] && boardLicorice[r][c] > 0) cellWrapper.classList.add('licorice-swirl-cell'); // Class for licorice
+                    if (currentLevelData.chocolateSpawners && currentLevelData.chocolateSpawners.some(sp => sp.r === r && sp.c ===c)) cellWrapper.classList.add('chocolate-spawner');
+                    if (r === collectionRow) cellWrapper.classList.add('collection-row-indicator');
+
+                    const itemDiv = document.createElement('div'); itemDiv.classList.add('game-item');
+                    
+                    if (item) {
+                        const visuals = getItemVisuals(item); const span = document.createElement('span'); span.textContent = visuals.display; itemDiv.appendChild(span);
+                        if (visuals.classes) { visuals.classes.split(' ').forEach(cls => cls && itemDiv.classList.add(cls)); }
+                        if (animate && item.isNew) { 
+                            itemDiv.style.transform = `translateY(-${(BOARD_SIZE - r + 1) * 50}%)`; itemDiv.style.opacity = '0';
+                            requestAnimationFrame(() => { requestAnimationFrame(() => { itemDiv.style.transition = 'transform 0.3s ease-out, opacity 0.3s ease-out'; itemDiv.style.transform = 'translateY(0)'; itemDiv.style.opacity = '1'; }); }); delete item.isNew;
+                        }
+                    } else if (boardChocolate[r]?.[c] || boardLicorice[r]?.[c]) {
+                        // Cell is covered by chocolate or licorice, no item visible
+                    }
+                    cellWrapper.appendChild(itemDiv);
+                    cellWrapper.addEventListener('pointerdown', onItemPointerDown); cellWrapper.addEventListener('pointerenter', onItemPointerEnter); 
+                    gameBoardElement.appendChild(cellWrapper);
+                }
+            }
+        }
+        
+        let dragStartItem = null;
+        function onItemPointerDown(e) { 
+            e.preventDefault(); 
+            const r = parseInt(e.currentTarget.dataset.r); const c = parseInt(e.currentTarget.dataset.c);
+
+            if (hammerBoosterActive) { useLollipopHammer(r,c); return; }
+            if (stripedBrushActive) { activateStripedBrush(r,c); return; }
+
+            // Prevent interaction if swapping, cascading, item is chained, or covered by chocolate/licorice (and no item underneath)
+            if (isSwapping || isCascading || (boardChains[r] && boardChains[r][c] > 0) || 
+                (boardChocolate[r] && boardChocolate[r][c] > 0 && !board[r][c]) ||
+                (boardLicorice[r] && boardLicorice[r][c] > 0 && !board[r][c]) ) return; 
+            
+            dragStartItem = { r, c, element: e.currentTarget.querySelector('.game-item') }; 
+            if (selectedItem) { 
+                const { r: r1, c: c1 } = selectedItem;
+                if (areAdjacent(r1, c1, r, c)) { clearHint(); swapItems(r1, c1, r, c); 
+                } else { 
+                    if(selectedItem.element) selectedItem.element.classList.remove('selected'); 
+                    selectedItem = { r, c, element: e.currentTarget.querySelector('.game-item') }; 
+                    if(selectedItem.element) selectedItem.element.classList.add('selected'); 
+                    playSound('click', 'D4'); 
+                }
+            } else { 
+                selectedItem = { r, c, element: e.currentTarget.querySelector('.game-item') }; 
+                if(selectedItem.element) selectedItem.element.classList.add('selected'); 
+                playSound('click', 'C4'); 
+            }
+            document.addEventListener('pointerup', onDocumentPointerUp, { once: true });
+        }
+        function onItemPointerEnter(e) { 
+            if (hammerBoosterActive || stripedBrushActive || !dragStartItem || isSwapping || isCascading) return; 
+            const r2 = parseInt(e.currentTarget.dataset.r); const c2 = parseInt(e.currentTarget.dataset.c);
+            if ((boardChains[r2] && boardChains[r2][c2] > 0) || 
+                (boardChocolate[r2] && boardChocolate[r2][c2] > 0 && !board[r2][c2]) ||
+                (boardLicorice[r2] && boardLicorice[r2][c2] > 0 && !board[r2][c2]) ) return; 
+            
+            const {r: r1, c: c1} = dragStartItem; if ((r1 === r2 && c1 === c2)) return;
+            if (areAdjacent(r1, c1, r2, c2)) {
+                clearHint(); swapItems(r1, c1, r2, c2); dragStartItem = null;
+                if (selectedItem && selectedItem.element) { selectedItem.element.classList.remove('selected'); } selectedItem = null;
+            }
+        }
+        function onDocumentPointerUp(e) { if(!hammerBoosterActive && !stripedBrushActive) dragStartItem = null; }
+        function areAdjacent(r1, c1, r2, c2) { return Math.abs(r1 - r2) + Math.abs(c1 - c2) === 1; }
+        
+        async function swapItems(r1, c1, r2, c2) { 
+            if (isSwapping || !board[r1] || !board[r1][c1] || !board[r2] || !board[r2][c2] || 
+                board[r1][c1].isIngredient || board[r2][c2].isIngredient || 
+                (boardChocolate[r1]?.[c1] && !board[r1][c1]) || (boardChocolate[r2]?.[c2] && !board[r2][c2]) ||
+                (boardLicorice[r1]?.[c1] && !board[r1][c1]) || (boardLicorice[r2]?.[c2] && !board[r2][c2]) ) { 
+                if(board[r1]?.[c1]?.isIngredient || board[r2]?.[c2]?.isIngredient) { 
+                    if(selectedItem && selectedItem.element) selectedItem.element.classList.remove('selected');
+                    selectedItem = null; isSwapping = false; return; 
+                } 
+                return;
+            }
+            isSwapping = true;
+            
+            const itemCell1 = gameBoardElement.querySelector(`.game-item-cell[data-r="${r1}"][data-c="${c1}"]`);
+            const itemCell2 = gameBoardElement.querySelector(`.game-item-cell[data-r="${r2}"][data-c="${c2}"]`);
+            const itemEl1 = itemCell1 ? itemCell1.querySelector('.game-item') : null;
+            const itemEl2 = itemCell2 ? itemCell2.querySelector('.game-item') : null;
+
+            if(itemEl1) itemEl1.classList.remove('selected'); if(itemEl2) itemEl2.classList.remove('selected'); selectedItem = null;
+            
+            const itemA = board[r1][c1]; const itemB = board[r2][c2];
+            
+            if (itemA.special && itemB.special) {
+                [board[r1][c1], board[r2][c2]] = [null, null]; 
+                renderBoard(); await new Promise(resolve => setTimeout(resolve, 150)); movesLeft--; updateMovesDisplay();
+                await activateSpecialCombination(r1, c1, itemA.special, itemA.typeId, r2, c2, itemB.special, itemB.typeId);
+            } else if (itemA.special === SPECIAL_ITEM_TYPES.COLOR_BOMB && !itemB.special) {
+                board[r1][c1] = null; 
+                renderBoard(); await new Promise(resolve => setTimeout(resolve, 150)); movesLeft--; updateMovesDisplay();
+                await activateSpecialCombination(r1, c1, itemA.special, itemA.typeId, r2, c2, itemB.special, itemB.typeId);
+            } else if (itemB.special === SPECIAL_ITEM_TYPES.COLOR_BOMB && !itemA.special) {
+                 board[r2][c2] = null; 
+                renderBoard(); await new Promise(resolve => setTimeout(resolve, 150)); movesLeft--; updateMovesDisplay();
+                await activateSpecialCombination(r2, c2, itemB.special, itemB.typeId, r1, c1, itemA.special, itemA.typeId);
+            } else {
+                [board[r1][c1], board[r2][c2]] = [itemB, itemA]; renderBoard(); playSound('swap'); await new Promise(resolve => setTimeout(resolve, 150));
+                const matches = findMatches();
+                if (matches.length > 0 || (itemA.special && !itemB.special) || (itemB.special && !itemA.special)) {
+                    movesLeft--; updateMovesDisplay(); 
+                    if (matches.length > 0) {
+                        await processMatches(matches);
+                    } else if (itemA.special && !itemB.special) { 
+                        await activateSpecialItem(r1, c1, itemA.special, itemA.typeId);
+                    } else if (itemB.special && !itemA.special) { 
+                        await activateSpecialItem(r2, c2, itemB.special, itemB.typeId);
+                    }
+                } else {
+                    [board[r1][c1], board[r2][c2]] = [itemA, itemB]; renderBoard(); playSound('swap', 'C3'); showNotification("No match formed!", "error", 1500);
+                }
+            }
+            await postMoveActions();
+        }
+        function findMatches() { 
+            const allMatches = []; const visited = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(false));
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (visited[r][c] || !board[r][c] || board[r][c].isIngredient || 
+                        (boardChocolate[r] && boardChocolate[r][c] > 0) || (boardLicorice[r] && boardLicorice[r][c] > 0) ) continue; 
+                    const itemType = board[r][c].typeId; if (!itemType) continue;
+                    
+                    let currentMatchH = [{ r, c }]; 
+                    for (let nc = c + 1; nc < BOARD_SIZE; nc++) { 
+                        if (board[r][nc] && !board[r][nc].isIngredient && 
+                            !(boardChocolate[r] && boardChocolate[r][nc] > 0) && !(boardLicorice[r] && boardLicorice[r][nc] > 0) && 
+                            board[r][nc].typeId === itemType) { currentMatchH.push({ r, c: nc }); } else break; 
+                    }
+                    if (currentMatchH.length >= 3) { allMatches.push(currentMatchH); currentMatchH.forEach(m => visited[m.r][m.c] = true); }
+                    
+                    let currentMatchV = [{ r, c }]; if (currentMatchH.length < 3) visited[r][c] = false;
+                    for (let nr = r + 1; nr < BOARD_SIZE; nr++) { 
+                        if (board[nr] && board[nr][c] && !board[nr][c].isIngredient && 
+                            !(boardChocolate[nr] && boardChocolate[nr][c] > 0) && !(boardLicorice[nr] && boardLicorice[nr][c] > 0) &&
+                            board[nr][c].typeId === itemType) { currentMatchV.push({ r: nr, c }); } else break; 
+                    }
+                    if (currentMatchV.length >= 3) { 
+                        let newItemsInMatchV = currentMatchV.filter(m => !visited[m.r][m.c]); 
+                        if (newItemsInMatchV.length > 0 || allMatches.every(existingMatch => !existingMatch.some(em => em.r === r && em.c ===c))) { 
+                            allMatches.push(currentMatchV); currentMatchV.forEach(m => visited[m.r][m.c] = true); 
+                        } 
+                    }
+                }
+            } return allMatches;
+        }
+        function hasInitialMatches() { return findMatches().length > 0; }
+
+        async function processMatches(matchGroups, fromCombo = false) { 
+            if (matchGroups.length === 0 && !fromCombo) { isCascading = false; if (!isSwapping) checkForNoMovesAndHint(); return; }
+            isCascading = true; let pointsThisTurn = 0; const cellsToClear = new Set(); const specialItemsToCreate = [];
+            
+            for (const group of matchGroups) {
+                group.forEach(cell => cellsToClear.add(`${cell.r}-${cell.c}`));
+                const {r, c} = group.find(cell => selectedItem && cell.r === selectedItem.r && cell.c === selectedItem.c && board[cell.r]?.[cell.c] && !board[cell.r][cell.c].isIngredient) || 
+                               group.find(cell => board[cell.r]?.[cell.c] && !board[cell.r][cell.c].isIngredient) || 
+                               group[Math.floor(group.length / 2)]; 
+                
+                const itemAtSpecialPos = board[r]?.[c];
+                if (itemAtSpecialPos && !itemAtSpecialPos.isIngredient && !fromCombo) {
+                    const itemType = itemAtSpecialPos.typeId;
+                    if (group.length === 5) { specialItemsToCreate.push({ r, c, typeId: itemType, special: SPECIAL_ITEM_TYPES.COLOR_BOMB }); playSound('specialCreate', 'C6'); showTutorialIfNeeded('first_color_bomb');}
+                    else if (group.length === 4) { 
+                        const isHorizontalMatch = group.every(cell => cell.r === group[0].r); 
+                        specialItemsToCreate.push({ r, c, typeId: itemType, special: isHorizontalMatch ? SPECIAL_ITEM_TYPES.STRIPED_V : SPECIAL_ITEM_TYPES.STRIPED_H }); 
+                        playSound('specialCreate', 'A5'); showTutorialIfNeeded('first_striped');
+                    } else { 
+                        const isIntersection = matchGroups.filter(mg => mg !== group && mg.some(mc => mc.r === r && mc.c === c)).length > 0;
+                        if(isIntersection && group.length < 5 && !specialItemsToCreate.some(s => s.r ===r && s.c === c) && group.length >=3) {
+                             specialItemsToCreate.push({r,c, typeId: itemType, special: SPECIAL_ITEM_TYPES.WRAPPED });
+                             playSound('specialCreate', 'B5'); showTutorialIfNeeded('first_wrapped');
+                        }
+                    }
+                }
+            }
+
+            const activatedSpecialsThisPass = [];
+            for (const cellCoord of cellsToClear) { const [r, c] = cellCoord.split('-').map(Number); const item = board[r] ? board[r][c] : null; if (item && item.special && !item.isIngredient) { activatedSpecialsThisPass.push({ ...item, r, c }); } }
+            for (const special of activatedSpecialsThisPass) { const affectedBySpecial = activateSpecialItem(special.r, special.c, special.special, special.typeId, true); affectedBySpecial.forEach(cell => cellsToClear.add(`${cell.r}-${cell.c}`)); playSound('specialActivate'); }
+            
+            let jellyClearedThisTurn = 0; let chainsBrokenThisTurn = 0; let chocolateClearedThisTurn = 0; let licoriceClearedThisTurn = 0;
+            for (const cellCoord of cellsToClear) {
+                const [r, c] = cellCoord.split('-').map(Number);
+                if (boardChains[r] && boardChains[r][c] > 0) { boardChains[r][c] = 0; chainsBrokenThisTurn++; playSound('chainBreak'); const cellWrapper = gameBoardElement.querySelector(`.game-item-cell[data-r="${r}"][data-c="${c}"]`); if(cellWrapper) cellWrapper.classList.remove('chained'); }
+                if (boardJelly[r] && boardJelly[r][c] > 0) { boardJelly[r][c]--; jellyClearedThisTurn++; playSound('jellyClear'); const cellWrapper = gameBoardElement.querySelector(`.game-item-cell[data-r="${r}"][data-c="${c}"]`); if(cellWrapper) { cellWrapper.classList.remove('jelly-layer-2', 'jelly-layer-1'); if(boardJelly[r][c] > 0) cellWrapper.classList.add(`jelly-layer-${boardJelly[r][c]}`);} }
+                if (boardChocolate[r] && boardChocolate[r][c] > 0) { boardChocolate[r][c] = 0; chocolateClearedThisTurn++; playSound('chocolateClear'); const cellWrapper = gameBoardElement.querySelector(`.game-item-cell[data-r="${r}"][data-c="${c}"]`); if(cellWrapper) cellWrapper.classList.remove('chocolate-layer'); }
+                if (boardLicorice[r] && boardLicorice[r][c] > 0) { boardLicorice[r][c] = 0; licoriceClearedThisTurn++; score += 50; playSound('licoriceClear'); const cellWrapper = gameBoardElement.querySelector(`.game-item-cell[data-r="${r}"][data-c="${c}"]`); if(cellWrapper) cellWrapper.classList.remove('licorice-swirl-cell'); }
+                
+                if (board[r]?.[c] && !board[r][c].isIngredient) {
+                    for (let dr = -1; dr <= 1; dr++) { for (let dc = -1; dc <= 1; dc++) {
+                        if (Math.abs(dr) + Math.abs(dc) !== 1) continue;
+                        const nr = r + dr; const nc = c + dc;
+                        if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                            if (boardChocolate[nr] && boardChocolate[nr][nc] > 0 && !cellsToClear.has(`${nr}-${nc}`)) {
+                                boardChocolate[nr][nc] = 0; chocolateClearedThisTurn++; playSound('chocolateClear');
+                                const adjCellWrapper = gameBoardElement.querySelector(`.game-item-cell[data-r="${nr}"][data-c="${nc}"]`); if (adjCellWrapper) adjCellWrapper.classList.remove('chocolate-layer');
+                            }
+                            if (boardLicorice[nr] && boardLicorice[nr][nc] > 0 && !cellsToClear.has(`${nr}-${nc}`)) { // Clear adjacent licorice
+                                boardLicorice[nr][nc] = 0; licoriceClearedThisTurn++; score += 50; playSound('licoriceClear');
+                                const adjCellWrapper = gameBoardElement.querySelector(`.game-item-cell[data-r="${nr}"][data-c="${nc}"]`); if (adjCellWrapper) adjCellWrapper.classList.remove('licorice-swirl-cell');
+                            }
+                        }
+                    }}
+                }
+                
+                if (board[r] && board[r][c] && !board[r][c].isIngredient) { 
+                    const itemElement = gameBoardElement.querySelector(`.game-item-cell[data-r="${r}"][data-c="${c}"] .game-item`); if (itemElement) { itemElement.classList.add('clearing'); }
+                    const clearedItemType = board[r][c].typeId; updateObjectiveProgress('clearColor', { itemType: clearedItemType });
+                    board[r][c] = null; pointsThisTurn += 10; playSound('match3', ['C4', 'E4', 'G4'][Math.floor(Math.random()*3)]);
+                }
+            }
+            if (jellyClearedThisTurn > 0) updateObjectiveProgress('clearAllJelly', { count: jellyClearedThisTurn });
+            if (chocolateClearedThisTurn > 0) updateObjectiveProgress('clearChocolate', { count: chocolateClearedThisTurn });
+            if (licoriceClearedThisTurn > 0) updateObjectiveProgress('clearLicorice', { count: licoriceClearedThisTurn });
+
+
+            if (pointsThisTurn > 0) { score += pointsThisTurn * (matchGroups.length > 1 ? matchGroups.length : 1); updateScoreDisplay(); }
+            if (cellsToClear.size > 5 || fromCombo) { triggerScreenShake(); }
+            await new Promise(resolve => setTimeout(resolve, 400));
+            for (const special of specialItemsToCreate) { 
+                if (board[special.r] && board[special.r][special.c] === null && 
+                    !(boardChocolate[special.r]?.[special.c]) && !(boardLicorice[special.r]?.[special.c])) { 
+                    board[special.r][special.c] = { typeId: special.typeId, special: special.special, isNew: true, isIngredient: false }; 
+                    updateObjectiveProgress('createSpecial', { specialType: special.special }); 
+                }
+            }
+            renderBoard(true); await new Promise(resolve => setTimeout(resolve, 100)); 
+            await dropAndFillItems(); 
+            const newMatches = findMatches(); 
+            if (newMatches.length > 0) { 
+                showNotification("Cascade!", "info", 1000); await processMatches(newMatches, true); 
+            } else { 
+                await spreadChocolate(); 
+                isCascading = false; 
+                if (checkWinCondition()) { levelComplete(); } 
+                else if (movesLeft <= 0) { checkGameEnd(); } 
+                else { if (!isSwapping) checkForNoMovesAndHint(); } 
+            }
+        }
+        function activateSpecialItem(r, c, specialType, itemType, isPartOfMatch = false) { 
+            const affectedCells = new Set(); 
+            affectedCells.add({r,c}); 
+            if(board[r] && board[r][c] && !(boardChocolate[r]?.[c]) && !(boardLicorice[r]?.[c])) {
+                board[r][c] = null; 
+            }
+            playSound('specialActivate');
+
+            if (specialType === SPECIAL_ITEM_TYPES.STRIPED_H) { 
+                for (let i = 0; i < BOARD_SIZE; i++) { 
+                    affectedCells.add({ r, c: i }); 
+                    if (boardLicorice[r] && boardLicorice[r][i] > 0) { break; } // Striped blast stops at licorice
+                    if (board[r] && board[r][i] && board[r][i].special && i !==c && !(boardChocolate[r]?.[i])) { activateSpecialItem(r,i, board[r][i].special, board[r][i].typeId, true).forEach(ac => affectedCells.add(ac));}
+                } 
+            } else if (specialType === SPECIAL_ITEM_TYPES.STRIPED_V) { 
+                for (let i = 0; i < BOARD_SIZE; i++) { 
+                    affectedCells.add({ r: i, c }); 
+                    if (boardLicorice[i] && boardLicorice[i][c] > 0) { break; } // Striped blast stops at licorice
+                    if (board[i] && board[i][c] && board[i][c].special && i !==r && !(boardChocolate[i]?.[c])) { activateSpecialItem(i,c, board[i][c].special, board[i][c].typeId, true).forEach(ac => affectedCells.add(ac));}
+                } 
+            } else if (specialType === SPECIAL_ITEM_TYPES.WRAPPED) { 
+                for (let dr = -1; dr <= 1; dr++) { for (let dc = -1; dc <= 1; dc++) { 
+                    const nr = r + dr; const nc = c + dc; 
+                    if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) { 
+                        affectedCells.add({ r: nr, c: nc }); 
+                        if (board[nr] && board[nr][nc] && board[nr][nc].special && (nr !==r || nc !==c) && !(boardChocolate[nr]?.[nc]) && !(boardLicorice[nr]?.[nc])) { activateSpecialItem(nr,nc, board[nr][nc].special, board[nr][nc].typeId, true).forEach(ac => affectedCells.add(ac));}
+                    } 
+                }} 
+            } else if (specialType === SPECIAL_ITEM_TYPES.COLOR_BOMB) { 
+                let targetColorId = itemType; 
+                if (!isPartOfMatch || (itemType === board[r]?.[c]?.typeId)){
+                    const colorCounts = {};
+                    for(let row=0; row<BOARD_SIZE; row++) for(let col=0; col<BOARD_SIZE; col++) {
+                        if(board[row][col] && !board[row][col].isIngredient && !board[row][col].special && !(boardChocolate[row]?.[col]) && !(boardLicorice[row]?.[col])) {
+                            colorCounts[board[row][col].typeId] = (colorCounts[board[row][col].typeId] || 0) + 1;
+                        }
+                    }
+                    if(Object.keys(colorCounts).length > 0) targetColorId = Object.keys(colorCounts).reduce((a,b) => colorCounts[a] > colorCounts[b] ? a : b);
+                    else targetColorId = ITEM_TYPES[0].id; 
+                }
+                for (let nr = 0; nr < BOARD_SIZE; nr++) { for (let nc = 0; nc < BOARD_SIZE; nc++) { 
+                    if (board[nr] && board[nr][nc] && !board[nr][nc].isIngredient && !(boardChocolate[nr]?.[nc]) && !(boardLicorice[nr]?.[nc]) && board[nr][nc].typeId === targetColorId) { 
+                        affectedCells.add({ r: nr, c: nc }); 
+                        if (board[nr][nc].special) { activateSpecialItem(nr, nc, board[nr][nc].special, board[nr][nc].typeId, true).forEach(ac => affectedCells.add(ac));}
+                    } 
+                }} 
+            }
+            
+            const uniqueAffectedCells = Array.from(affectedCells).filter((obj, index, self) => index === self.findIndex((t) => (t.r === obj.r && t.c === obj.c)));
+
+            if (!isPartOfMatch && !isSwapping && !isCascading) {
+                movesLeft--; updateMovesDisplay(); const cellsToClearSet = new Set(); uniqueAffectedCells.forEach(cell => cellsToClearSet.add(`${cell.r}-${cell.c}`));
+                let currentChocolateCleared = 0; let currentJellyCleared = 0; let currentLicoriceCleared = 0;
+                for (const cellCoord of cellsToClearSet) {
+                    const [row, col] = cellCoord.split('-').map(Number);
+                    if (boardChains[row] && boardChains[row][col] > 0) { boardChains[row][col] = 0; playSound('chainBreak'); const cellWrapper = gameBoardElement.querySelector(`.game-item-cell[data-r="${row}"][data-c="${col}"]`); if(cellWrapper) cellWrapper.classList.remove('chained');}
+                    if (boardJelly[row] && boardJelly[row][col] > 0) { boardJelly[row][col] = 0; currentJellyCleared++; playSound('jellyClear'); }
+                    if (boardChocolate[row] && boardChocolate[row][col] > 0) { boardChocolate[row][col] = 0; currentChocolateCleared++; playSound('chocolateClear'); const cellWrapper = gameBoardElement.querySelector(`.game-item-cell[data-r="${row}"][data-c="${col}"]`); if(cellWrapper) cellWrapper.classList.remove('chocolate-layer');}
+                    if (boardLicorice[row] && boardLicorice[row][col] > 0) { boardLicorice[row][col] = 0; currentLicoriceCleared++; score += 50; playSound('licoriceClear'); const cellWrapper = gameBoardElement.querySelector(`.game-item-cell[data-r="${row}"][data-c="${col}"]`); if(cellWrapper) cellWrapper.classList.remove('licorice-swirl-cell');}
+
+
+                    if (board[row] && board[row][col] && !board[row][col].isIngredient) {
+                        const itemElement = gameBoardElement.querySelector(`.game-item-cell[data-r="${row}"][data-c="${col}"] .game-item`); if (itemElement) itemElement.classList.add('clearing');
+                        const originalItemType = board[row][col]?.typeId; board[row][col] = null; score += 10; if(originalItemType) updateObjectiveProgress('clearColor', { itemType: originalItemType });
+                    } else if (board[row] && board[row][col] && board[row][col].isIngredient) { 
+                         board[row][col] = null; score +=5; 
+                    }
+                } 
+                if (currentChocolateCleared > 0) updateObjectiveProgress('clearChocolate', { count: currentChocolateCleared });
+                if (currentJellyCleared > 0) updateObjectiveProgress('clearAllJelly', { count: currentJellyCleared });
+                if (currentLicoriceCleared > 0) updateObjectiveProgress('clearLicorice', { count: currentLicoriceCleared });
+
+                updateScoreDisplay();
+                if (cellsToClearSet.size > 5) { triggerScreenShake(); }
+                (async () => {
+                    await new Promise(resolve => setTimeout(resolve, 400)); renderBoard(true); await new Promise(resolve => setTimeout(resolve, 100)); await dropAndFillItems();
+                    const newMatches = findMatches(); if (newMatches.length > 0) { showNotification("Cascade!", "info", 1000); await processMatches(newMatches, true); }
+                    else { 
+                        await spreadChocolate(); isCascading = false; 
+                        if (checkWinCondition()) levelComplete(); else if (movesLeft <= 0) checkGameEnd(); else checkForNoMovesAndHint(); 
+                    }
+                })();
+            }
+            return uniqueAffectedCells;
+        }
+        async function activateSpecialCombination(r1, c1, special1, type1, r2, c2, special2, type2) {
+            let cellsToClearSet = new Set(); playSound('bigExplosion'); triggerScreenShake(0.5);
+            if ((special1 === SPECIAL_ITEM_TYPES.STRIPED_H || special1 === SPECIAL_ITEM_TYPES.STRIPED_V) && 
+                (special2 === SPECIAL_ITEM_TYPES.STRIPED_H || special2 === SPECIAL_ITEM_TYPES.STRIPED_V)) { 
+                 for (let r = 0; r < BOARD_SIZE; r++) { cellsToClearSet.add(`${r}-${c1}`); if(boardLicorice[r]?.[c1]) break; } 
+                 for (let c = 0; c < BOARD_SIZE; c++) { cellsToClearSet.add(`${r1}-${c}`); if(boardLicorice[r1]?.[c]) break; } 
+            } else if ((special1 === SPECIAL_ITEM_TYPES.STRIPED_H || special1 === SPECIAL_ITEM_TYPES.STRIPED_V) && special2 === SPECIAL_ITEM_TYPES.WRAPPED ||
+                (special2 === SPECIAL_ITEM_TYPES.STRIPED_H || special2 === SPECIAL_ITEM_TYPES.STRIPED_V) && special1 === SPECIAL_ITEM_TYPES.WRAPPED) {
+                const centerR = special1 === SPECIAL_ITEM_TYPES.WRAPPED ? r1 : r2; 
+                const centerC = special1 === SPECIAL_ITEM_TYPES.WRAPPED ? c1 : c2;
+                for (let r = 0; r < BOARD_SIZE; r++) { for (let c = centerC - 1; c <= centerC + 1; c++) { if (c >=0 && c < BOARD_SIZE) { cellsToClearSet.add(`${r}-${c}`); if(boardLicorice[r]?.[c] && (c === centerC-1 || c === centerC+1)) {} else if (boardLicorice[r]?.[c]) break; } } } // Center column of 3 wide is not stopped by licorice in outer columns
+                for (let c = 0; c < BOARD_SIZE; c++) { for (let r = centerR - 1; r <= centerR + 1; r++) { if (r >=0 && r < BOARD_SIZE) { cellsToClearSet.add(`${r}-${c}`); if(boardLicorice[r]?.[c] && (r === centerR-1 || r === centerR+1)) {} else if (boardLicorice[r]?.[c]) break; } } }
+            } else if (special1 === SPECIAL_ITEM_TYPES.COLOR_BOMB && (special2 === SPECIAL_ITEM_TYPES.STRIPED_H || special2 === SPECIAL_ITEM_TYPES.STRIPED_V)) {
+                const targetType = type2; 
+                for (let r = 0; r < BOARD_SIZE; r++) { for (let c = 0; c < BOARD_SIZE; c++) { if (board[r] && board[r][c] && !board[r][c].isIngredient && !(boardChocolate[r]?.[c]) && !(boardLicorice[r]?.[c]) && board[r][c].typeId === targetType) { board[r][c].special = special2; } } }
+                await new Promise(resolve => setTimeout(resolve, 100)); renderBoard(); await new Promise(resolve => setTimeout(resolve, 200)); 
+                for (let r = 0; r < BOARD_SIZE; r++) { for (let c = 0; c < BOARD_SIZE; c++) { if (board[r] && board[r][c] && !board[r][c].isIngredient && !(boardChocolate[r]?.[c]) && !(boardLicorice[r]?.[c]) && board[r][c].typeId === targetType && board[r][c].special) { activateSpecialItem(r, c, board[r][c].special, board[r][c].typeId, true).forEach(ac => cellsToClearSet.add(`${ac.r}-${ac.c}`)); } } }
+            } else if (special1 === SPECIAL_ITEM_TYPES.COLOR_BOMB && special2 === SPECIAL_ITEM_TYPES.WRAPPED) {
+                const targetType = type2; 
+                for (let r = 0; r < BOARD_SIZE; r++) { for (let c = 0; c < BOARD_SIZE; c++) { if (board[r] && board[r][c] && !(boardChocolate[r]?.[c]) && !(boardLicorice[r]?.[c]) && board[r][c].typeId === targetType) { cellsToClearSet.add(`${r}-${c}`); board[r][c] = null; } } }
+                let secondTargetColor = ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)].id; 
+                for (let r = 0; r < BOARD_SIZE; r++) { for (let c = 0; c < BOARD_SIZE; c++) { if (board[r] && board[r][c] && !(boardChocolate[r]?.[c]) && !(boardLicorice[r]?.[c]) && board[r][c].typeId === secondTargetColor) { cellsToClearSet.add(`${r}-${c}`); board[r][c] = null; } } }
+            } else if (special1 === SPECIAL_ITEM_TYPES.COLOR_BOMB && special2 === SPECIAL_ITEM_TYPES.COLOR_BOMB) {
+                for (let r = 0; r < BOARD_SIZE; r++) { for (let c = 0; c < BOARD_SIZE; c++) { cellsToClearSet.add(`${r}-${c}`); } }
+            } else if (special1 === SPECIAL_ITEM_TYPES.WRAPPED && special2 === SPECIAL_ITEM_TYPES.WRAPPED) {
+                const midR = Math.floor((r1+r2)/2); const midC = Math.floor((c1+c2)/2);
+                for (let dr = -2; dr <= 2; dr++) { for (let dc = -2; dc <= 2; dc++) { const nr = midR + dr; const nc = midC + dc; if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) { cellsToClearSet.add(`${nr}-${nc}`); } } }
+            } else { 
+                 activateSpecialItem(r1, c1, special1, type1, true).forEach(ac => cellsToClearSet.add(`${ac.r}-${ac.c}`));
+                 if(special2) activateSpecialItem(r2, c2, special2, type2, true).forEach(ac => cellsToClearSet.add(`${ac.r}-${ac.c}`));
+            }
+            let currentScoreForCombo = 0; let jellyClearedThisCombo = 0; let chainsBrokenThisCombo = 0; let chocolateClearedThisCombo = 0; let licoriceClearedThisCombo = 0;
+            for (const cellCoord of cellsToClearSet) {
+                const [r, c] = cellCoord.split('-').map(Number);
+                 if (boardChains[r] && boardChains[r][c] > 0) { boardChains[r][c] = 0; chainsBrokenThisCombo++; playSound('chainBreak'); const cellWrapper = gameBoardElement.querySelector(`.game-item-cell[data-r="${r}"][data-c="${c}"]`); if(cellWrapper) cellWrapper.classList.remove('chained');}
+                if (boardJelly[r] && boardJelly[r][c] > 0) { boardJelly[r][c] = 0; jellyClearedThisCombo++; playSound('jellyClear'); } 
+                if (boardChocolate[r] && boardChocolate[r][c] > 0) { boardChocolate[r][c] = 0; chocolateClearedThisCombo++; playSound('chocolateClear'); const cellWrapper = gameBoardElement.querySelector(`.game-item-cell[data-r="${r}"][data-c="${c}"]`); if(cellWrapper) cellWrapper.classList.remove('chocolate-layer'); }
+                if (boardLicorice[r] && boardLicorice[r][c] > 0) { boardLicorice[r][c] = 0; licoriceClearedThisCombo++; score += 50; playSound('licoriceClear'); const cellWrapper = gameBoardElement.querySelector(`.game-item-cell[data-r="${r}"][data-c="${c}"]`); if(cellWrapper) cellWrapper.classList.remove('licorice-swirl-cell');}
+                if (board[r] && board[r][c]) {
+                    const itemElement = gameBoardElement.querySelector(`.game-item-cell[data-r="${r}"][data-c="${c}"] .game-item`); if (itemElement) itemElement.classList.add('clearing');
+                    const clearedItemType = board[r][c].typeId; if(!board[r][c].isIngredient) updateObjectiveProgress('clearColor', { itemType: clearedItemType });
+                    board[r][c] = null; currentScoreForCombo += 10;
+                }
+            }
+            if (jellyClearedThisCombo > 0) updateObjectiveProgress('clearAllJelly', { count: jellyClearedThisCombo });
+            if (chocolateClearedThisCombo > 0) updateObjectiveProgress('clearChocolate', { count: chocolateClearedThisCombo });
+            if (licoriceClearedThisCombo > 0) updateObjectiveProgress('clearLicorice', { count: licoriceClearedThisCombo });
+
+
+            if (currentScoreForCombo > 0) { score += currentScoreForCombo; updateScoreDisplay(); }
+            await new Promise(resolve => setTimeout(resolve, 400)); renderBoard(true); await new Promise(resolve => setTimeout(resolve, 100));
+            await dropAndFillItems(); const newMatches = findMatches();
+            if (newMatches.length > 0) { showNotification("Mega Cascade!", "info", 1500); await processMatches(newMatches, true); }
+            else { 
+                await spreadChocolate(); isCascading = false; 
+                if (checkWinCondition()) { levelComplete(); } else if (movesLeft <= 0) { checkGameEnd(); } else { if (!isSwapping) checkForNoMovesAndHint(); } 
+            }
+        }
+        async function dropAndFillItems() { 
+            let itemsMoved = false;
+            for (let c = 0; c < BOARD_SIZE; c++) { 
+                let emptyRow = -1; 
+                for (let r = BOARD_SIZE - 1; r >= 0; r--) { 
+                    if (boardChocolate[r]?.[c] || boardLicorice[r]?.[c]) { // Chocolate or Licorice blocks falling
+                        emptyRow = -1; 
+                        continue;
+                    }
+                    if (board[r][c] === null && emptyRow === -1) { emptyRow = r; } 
+                    else if (board[r][c] !== null && emptyRow !== -1) { 
+                        board[emptyRow][c] = board[r][c]; board[r][c] = null; 
+                        if (board[emptyRow][c].isIngredient && emptyRow === BOARD_SIZE -1) {
+                            updateObjectiveProgress('collectIngredients', { typeId: board[emptyRow][c].typeId.toUpperCase() });
+                            board[emptyRow][c] = null; playSound('ingredientCollect');
+                        }
+                        playSound('cascade', 'D3'); itemsMoved = true; emptyRow--; 
+                    }
+                } 
+            }
+            for (let c = 0; c < BOARD_SIZE; c++) { 
+                let newItemsInCol = 0;
+                for (let r = BOARD_SIZE - 1; r >= 0; r--) { 
+                    if (board[r][c] === null && !(boardChocolate[r]?.[c]) && !(boardLicorice[r]?.[c])) { // Only fill if no chocolate or licorice
+                        const levelIngredientObjective = currentLevelData.objectives.find(obj => obj.type === 'collectIngredients');
+                        const levelIngredientData = levelIngredientObjective ? levelIngredientObjective.ingredients : [];
+                        const totalIngredientsNeeded = levelIngredientData.reduce((sum, ing) => sum + ing.count, 0);
+                        const ingredientsCollected = objectivesProgress.ingredientsCollected ? Object.values(objectivesProgress.ingredientsCollected).reduce((s,v) => s+v, 0) : 0;
+                        const ingredientsOnBoard = board.flat().filter(item => item?.isIngredient).length;
+
+                        if (r === 0 && newItemsInCol < 2 && Math.random() < 0.15 && (ingredientsOnBoard + ingredientsCollected < totalIngredientsNeeded) && levelIngredientData.length > 0) {
+                            const neededIngredients = levelIngredientData.filter(ing => (objectivesProgress.ingredientsCollected?.[ing.typeId.toUpperCase()] || 0) < ing.count);
+                            if (neededIngredients.length > 0) {
+                                const ingTypeIdToSpawn = neededIngredients[Math.floor(Math.random() * neededIngredients.length)].typeId;
+                                const ingDefinition = INGREDIENT_TYPES[ingTypeIdToSpawn.toUpperCase()];
+                                if (ingDefinition) {
+                                    board[r][c] = { typeId: ingDefinition.id, special: null, isIngredient: true, display: ingDefinition.display, isNew: true };
+                                } else { board[r][c] = getRandomItem(); board[r][c].isNew = true; }
+                            } else { board[r][c] = getRandomItem(); board[r][c].isNew = true; }
+                        } else { 
+                           board[r][c] = getRandomItem(); board[r][c].isNew = true; 
+                        }
+                        newItemsInCol++; playSound('cascade', 'E3'); itemsMoved = true; 
+                    } 
+                } 
+            }
+            if (itemsMoved) { renderBoard(true); await new Promise(resolve => setTimeout(resolve, 300 + BOARD_SIZE * 20)); }
+        }
+        
+        async function spreadChocolate() {
+            if (!currentLevelData.chocolateSpawners && !board.flat().some((item,idx) => boardChocolate[Math.floor(idx/BOARD_SIZE)][idx%BOARD_SIZE] > 0)) return; 
+
+            let chocolateSpreadThisTurn = false;
+            const newChocolatePositions = []; 
+
+            if (currentLevelData.chocolateSpawners) {
+                for (const spawner of currentLevelData.chocolateSpawners) {
+                    const { r: sr, c: sc } = spawner;
+                    const directions = [{dr: -1, dc: 0}, {dr: 1, dc: 0}, {dr: 0, dc: -1}, {dr: 0, dc: 1}];
+                    directions.sort(() => Math.random() - 0.5); 
+                    for (const dir of directions) {
+                         const nr = sr + dir.dr; const nc = sc + dir.dc;
+                         if (nr >=0 && nr < BOARD_SIZE && nc >=0 && nc < BOARD_SIZE && !boardChocolate[nr][nc] && !boardLicorice[nr][nc] && Math.random() < 0.25) { 
+                            if (!board[nr][nc] || (board[nr][nc] && !board[nr][nc].isIngredient && !board[nr][nc].special)) { 
+                                newChocolatePositions.push({r: nr, c: nc});
+                                break; 
+                            }
+                         }
+                    }
+                }
+            }
+            
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (boardChocolate[r][c] > 0) { 
+                        const directions = [{dr: -1, dc: 0}, {dr: 1, dc: 0}, {dr: 0, dc: -1}, {dr: 0, dc: 1}];
+                        directions.sort(() => Math.random() - 0.5); 
+                        for (const dir of directions) {
+                            const nr = r + dir.dr; const nc = c + dir.dc;
+                            if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && !boardChocolate[nr][nc] && !boardLicorice[nr][nc] && Math.random() < 0.2) { 
+                                 if (!board[nr][nc] || (board[nr][nc] && !board[nr][nc].isIngredient && !board[nr][nc].special)) { 
+                                    newChocolatePositions.push({r: nr, c: nc});
+                                    break; 
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (newChocolatePositions.length > 0) {
+                newChocolatePositions.forEach(pos => {
+                    if (!boardChocolate[pos.r][pos.c] && !boardLicorice[pos.r][pos.c]) { 
+                        boardChocolate[pos.r][pos.c] = 1;
+                        chocolateSpreadThisTurn = true;
+                    }
+                });
+            }
+
+            if (chocolateSpreadThisTurn) {
+                playSound('chocolateSpread');
+                showNotification("Chocolate is spreading!", "warn", 1500);
+                renderBoard(true); 
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+        }
+
+        async function postMoveActions() {
+            isSwapping = false; 
+            if (!isCascading) { 
+                await spreadChocolate(); 
+                checkForNoMovesAndHint(); 
+            }
+            if (movesLeft <= 0 && !checkWinCondition() && !isCascading) { checkGameEnd(); }
+        }
+
+        function startGame(level) { 
+            currentLevel = level; currentLevelData = LEVELS.find(l => l.level === currentLevel);
+            if (!currentLevelData) { showNotification("Error: Level data missing.", "error"); showLevelSelectScreen(); return; }
+            
+            score = 0; movesLeft = currentLevelData.moves; selectedItem = null; isSwapping = false; isCascading = false;
+            boostersUsedThisLevel = { extraMoves: false, shuffle: false, hammer: false, stripedBrush: false, startColorBomb: false }; 
+            continueUsedThisLevel = false; updateBoosterButtons();
+            hammerBoosterActive = false; stripedBrushActive = false; gameBoardElement.classList.remove('hammer-active', 'striped-brush-active');
+            
+            initializeObjectives(); updateScoreDisplay(); updateMovesDisplay(); updateObjectivesDisplay(); updateGemsDisplay();
+            currentLevelDisplay.textContent = currentLevel; 
+            targetScoreDisplay.textContent = (currentLevelData.objectives.find(obj => obj.type === 'score')?.value || currentLevelData.targetScore || 0).toLocaleString();
+            
+            createBoard(); renderBoard(); showGameScreen(); playSound('click', 'G4'); 
+            
+            if (currentLevelData.tutorial && !playerProgress.tutorialsShown[currentLevelData.tutorial]) {
+                showTutorialIfNeeded(currentLevelData.tutorial);
+            } else if (level === 1 && !playerProgress.tutorialsShown?.welcome_level1) {
+                 showTutorialIfNeeded('welcome_level1');
+            }
+
+            checkForNoMovesAndHint();
+        }
+        function initializeObjectives() { 
+            objectivesProgress = {}; 
+            if (!currentLevelData || !currentLevelData.objectives) return;
+            currentLevelData.objectives.forEach(obj => {
+                if (obj.type === 'score') { objectivesProgress.score = 0; }
+                else if (obj.type === 'clearColor') { objectivesProgress[`clear_${obj.itemType}`] = 0; }
+                else if (obj.type === 'createSpecial') { objectivesProgress[`create_${obj.specialType}`] = 0; } 
+                else if (obj.type === 'clearAllJelly') { 
+                    objectivesProgress.jellyCleared = 0; objectivesProgress.totalJelly = 0; 
+                    if(currentLevelData.jelly) { currentLevelData.jelly.forEach(row => row.forEach(cellJelly => objectivesProgress.totalJelly += cellJelly));} 
+                }
+                else if (obj.type === 'collectIngredients') { 
+                    objectivesProgress.ingredientsCollected = {}; 
+                    obj.ingredients.forEach(ing => objectivesProgress.ingredientsCollected[ing.typeId.toUpperCase()] = 0); 
+                    objectivesProgress.totalIngredients = obj.ingredients.reduce((sum, ing) => sum + ing.count, 0); 
+                }
+                else if (obj.type === 'clearChocolate') { objectivesProgress.chocolateCleared = 0; objectivesProgress.totalChocolateToClear = obj.count; }
+                else if (obj.type === 'clearLicorice') { // New objective
+                    objectivesProgress.licoriceCleared = 0; 
+                    objectivesProgress.totalLicoriceToClear = obj.count; 
+                }
+            });
+        }
+        function updateObjectiveProgress(type, detail) { 
+            if (!currentLevelData || !currentLevelData.objectives) return;
+            const relevantObjective = currentLevelData.objectives.find(obj => { 
+                if (obj.type === type) { 
+                    if (type === 'clearColor' && obj.itemType === detail.itemType) return true; 
+                    if (type === 'createSpecial' && obj.specialType === detail.specialType) return true; 
+                    if (type === 'score') return true; 
+                    if (type === 'clearAllJelly') return true; 
+                    if (type === 'collectIngredients' && (obj.ingredients.some(ing => ing.typeId.toUpperCase() === detail.typeId?.toUpperCase()) || !detail.typeId)) return true;
+                    if (type === 'clearChocolate') return true;
+                    if (type === 'clearLicorice') return true; // New objective
+                } return false; 
+            });
+            if (relevantObjective) { 
+                if (type === 'clearColor') { const key = `clear_${detail.itemType}`; objectivesProgress[key] = (objectivesProgress[key] || 0) + 1; } 
+                else if (type === 'createSpecial') { const key = `create_${detail.specialType}`; objectivesProgress[key] = (objectivesProgress[key] || 0) + 1; } 
+                else if (type === 'clearAllJelly') { objectivesProgress.jellyCleared = (objectivesProgress.jellyCleared || 0) + detail.count; }
+                else if (type === 'collectIngredients') { objectivesProgress.ingredientsCollected[detail.typeId.toUpperCase()] = (objectivesProgress.ingredientsCollected[detail.typeId.toUpperCase()] || 0) + 1; }
+                else if (type === 'clearChocolate') { objectivesProgress.chocolateCleared = (objectivesProgress.chocolateCleared || 0) + detail.count; }
+                else if (type === 'clearLicorice') { objectivesProgress.licoriceCleared = (objectivesProgress.licoriceCleared || 0) + detail.count; } // New objective
+            }
+            updateObjectivesDisplay();
+        }
+        function updateScoreDisplay() { 
+            scoreDisplay.textContent = score.toLocaleString();
+            const target = currentLevelData.objectives.find(obj => obj.type === 'score')?.value || currentLevelData.targetScore || 0;
+            const progress = target > 0 ? Math.min(100, (score / target) * 100) : (score > 0 ? 100 : 0); 
+            scoreProgressBar.style.width = `${progress}%`; scoreProgressBar.textContent = `${Math.floor(progress)}%`;
+            if (currentLevelData.objectives.some(obj => obj.type === 'score')) { objectivesProgress.score = score; updateObjectivesDisplay(); }
+        }
+        function updateMovesDisplay() { movesDisplay.textContent = movesLeft; }
+        function updateGemsDisplay() { const gems = playerProgress.gems || 0; playerGemsDisplay.textContent = gems; playerGemsGameDisplay.textContent = gems; }
+        function updateObjectivesDisplay() { 
+            objectivesContainer.innerHTML = '<h3 class="text-md font-semibold mb-1">Objectives:</h3>';
+            if (!currentLevelData || !currentLevelData.objectives) return;
+            currentLevelData.objectives.forEach(obj => {
+                const p = document.createElement('p'); p.classList.add('text-sm', 'flex', 'justify-between', 'items-center');
+                let text = '', currentProg = 0, targetVal = 0, achieved = false;
+                if (obj.type === 'score') { targetVal = obj.value; text = `Score ${targetVal.toLocaleString()}`; currentProg = objectivesProgress.score || 0; achieved = currentProg >= targetVal; }
+                else if (obj.type === 'clearColor') { targetVal = obj.count; const itemVisual = ITEM_TYPES.find(it => it.id === obj.itemType)?.display || obj.itemType; text = `Clear ${obj.count} <span class="inline-block w-4 h-4 mx-1 align-middle text-xl">${itemVisual}</span>`; currentProg = objectivesProgress[`clear_${obj.itemType}`] || 0; achieved = currentProg >= obj.count; text += ` (${currentProg}/${targetVal})`;}
+                else if (obj.type === 'createSpecial') { targetVal = obj.count; text = `Create ${obj.count} ${obj.specialType.replace('-', ' ')}`; currentProg = objectivesProgress[`create_${obj.specialType}`] || 0; achieved = currentProg >= obj.count; text += ` (${currentProg}/${targetVal})`;}
+                else if (obj.type === 'clearAllJelly') { targetVal = objectivesProgress.totalJelly || 0; text = `Clear All Jelly`; currentProg = objectivesProgress.jellyCleared || 0; achieved = targetVal > 0 && currentProg >= targetVal; text += ` (${currentProg}/${targetVal})`; }
+                else if (obj.type === 'collectIngredients') {
+                    let ingText = 'Collect: '; let allCollected = true;
+                    obj.ingredients.forEach((ing, index) => {
+                        const collected = objectivesProgress.ingredientsCollected?.[ing.typeId.toUpperCase()] || 0;
+                        const ingVisual = INGREDIENT_TYPES[ing.typeId.toUpperCase()]?.display || ing.typeId;
+                        ingText += `${collected}/${ing.count} ${ingVisual}${index < obj.ingredients.length -1 ? ', ' : ''}`;
+                        if (collected < ing.count) allCollected = false;
+                    });
+                    text = ingText; achieved = allCollected;
+                }
+                else if (obj.type === 'clearChocolate') { targetVal = obj.count; text = `Clear ${targetVal} Chocolate 🍫`; currentProg = objectivesProgress.chocolateCleared || 0; achieved = currentProg >= targetVal; text += ` (${currentProg}/${targetVal})`; }
+                else if (obj.type === 'clearLicorice') { targetVal = obj.count; text = `Clear ${targetVal} Licorice 🌀`; currentProg = objectivesProgress.licoriceCleared || 0; achieved = currentProg >= targetVal; text += ` (${currentProg}/${targetVal})`; }
+
+
+                const icon = achieved ? '<i class="fas fa-check-circle text-green-400 ml-2"></i>' : '<i class="far fa-circle text-gray-400 ml-2"></i>';
+                p.innerHTML = `<span>${text}</span> ${icon}`; if (achieved) p.classList.add('line-through', 'text-gray-400');
+                objectivesContainer.appendChild(p);
+            });
+        }
+        function checkWinCondition() { 
+            if (!currentLevelData || !currentLevelData.objectives) return false;
+            return currentLevelData.objectives.every(obj => { 
+                if (obj.type === 'score') { return score >= obj.value; } 
+                else if (obj.type === 'clearColor') { return (objectivesProgress[`clear_${obj.itemType}`] || 0) >= obj.count; } 
+                else if (obj.type === 'createSpecial') { return (objectivesProgress[`create_${obj.specialType}`] || 0) >= obj.count; } 
+                else if (obj.type === 'clearAllJelly') { return objectivesProgress.totalJelly > 0 && (objectivesProgress.jellyCleared || 0) >= objectivesProgress.totalJelly; }
+                else if (obj.type === 'collectIngredients') { return obj.ingredients.every(ing => (objectivesProgress.ingredientsCollected?.[ing.typeId.toUpperCase()] || 0) >= ing.count); }
+                else if (obj.type === 'clearChocolate') { return (objectivesProgress.chocolateCleared || 0) >= obj.count; }
+                else if (obj.type === 'clearLicorice') { return (objectivesProgress.licoriceCleared || 0) >= obj.count; }
+                return false; 
+            });
+        }
+        function levelComplete() { 
+            playSound('levelComplete'); 
+            const stars = calculateStars(); 
+            let newHighScore = false;
+            const levelKey = `level_${currentLevel}`;
+            const currentBest = playerProgress[levelKey] || { highScore: 0, stars: 0 };
+            if (score > currentBest.highScore) { newHighScore = true; }
+
+            showNotification(`Level ${currentLevel} Complete! ${newHighScore ? "New High Score!" : ""}`, "success", 3000);
+            if (stars === 3 && (!currentBest.awardedThreeStarBonus || currentBest.highScore < score)) { 
+                playerProgress.gems = (playerProgress.gems || 0) + 5; 
+                showNotification("3-Star Bonus: +5 Gems!", "success", 3500);
+                if(playerProgress[levelKey]) playerProgress[levelKey].awardedThreeStarBonus = true; else playerProgress[levelKey] = {awardedThreeStarBonus: true};
+            }
+            updatePlayerProgress(currentLevel, score, stars); updateGemsDisplay();
+            modalTitle.textContent = `Level ${currentLevel} Complete!`; 
+            let completeMessage = `You are a Candy Pro!`;
+            if (newHighScore) completeMessage += ` 🎉 New High Score: ${score.toLocaleString()}!`;
+            modalMessage.textContent = completeMessage;
+            modalStats.innerHTML = `<p>Score: ${score.toLocaleString()}</p><p>Stars: ${'<i class="fas fa-star text-yellow-400"></i>'.repeat(stars)}${'<i class="far fa-star text-gray-300"></i>'.repeat(3-stars)}</p>`;
+            modalActionsContainer.innerHTML = ''; modalActionsContainer.appendChild(modalActionPrimary); modalActionsContainer.appendChild(modalActionSecondary); 
+            stripeChoiceContainer.classList.add('hidden'); 
+            modalActionPrimary.textContent = currentLevel < MAX_LEVEL ? "Next Level" : "All Levels Done!";
+            modalActionPrimary.onclick = () => { closeModal(); if (currentLevel < MAX_LEVEL) { startGame(currentLevel + 1); } else { showNotification("Congratulations! You've completed all levels!", "success", 5000); showLevelSelectScreen(); } };
+            modalActionSecondary.textContent = "Back to Levels"; modalActionSecondary.onclick = () => { closeModal(); showLevelSelectScreen(); }; openModal();
+            if (currentLevel === MAX_LEVEL && stars > 0) { triggerConfetti(150, 5000); } else { triggerConfetti(); }
+        }
+        function calculateStars() { 
+            const target = currentLevelData.objectives.find(obj => obj.type === 'score')?.value || currentLevelData.targetScore || 1;
+            if (target === 0 && score > 0) return 3; 
+            if (target === 0 && score === 0) return 0;
+            const scoreRatio = score / target;
+            if (scoreRatio >= 1.5) return 3; if (scoreRatio >= 1.0) return 2; if (scoreRatio >= 0.7) return 1; return 0;
+        }
+        function checkGameEnd() { 
+            if (movesLeft <= 0 && !checkWinCondition()) { 
+                if (!continueUsedThisLevel && (playerProgress.gems || 0) >= GEMS_FOR_CONTINUE) {
+                    promptContinueWithGems(); 
+                } else {
+                    gameOver(); 
+                }
+            }
+        }
+        function promptContinueWithGems() {
+            modalTitle.textContent = "Out of Moves!";
+            modalMessage.textContent = `Spend ${GEMS_FOR_CONTINUE} 💎 for ${MOVES_FOR_CONTINUE} extra moves?`;
+            modalStats.innerHTML = `<p>Your Gems: ${playerProgress.gems || 0}</p>`;
+            modalActionsContainer.innerHTML = ''; 
+            stripeChoiceContainer.classList.add('hidden');
+            const continueButton = document.createElement('button');
+            continueButton.className = modalActionPrimary.className; 
+            continueButton.textContent = `Continue (${GEMS_FOR_CONTINUE} 💎)`;
+            continueButton.onclick = () => {
+                playerProgress.gems = (playerProgress.gems || 0) - GEMS_FOR_CONTINUE;
+                movesLeft += MOVES_FOR_CONTINUE;
+                continueUsedThisLevel = true;
+                updateMovesDisplay(); updateGemsDisplay(); savePlayerProgress();
+                closeModal();
+                showNotification(`+${MOVES_FOR_CONTINUE} Moves Added!`, "success");
+                playSound('booster');
+                 checkForNoMovesAndHint(); 
+            };
+            const endLevelButton = document.createElement('button');
+            endLevelButton.className = modalActionSecondary.className;
+            endLevelButton.textContent = "End Level";
+            endLevelButton.onclick = () => { closeModal(); gameOver(); };
+            modalActionsContainer.appendChild(continueButton);
+            modalActionsContainer.appendChild(endLevelButton);
+            openModal();
+        }
+        function gameOver() { 
+            playSound('gameOver'); showNotification("Game Over!", "error", 3000);
+            modalTitle.textContent = "Game Over"; modalMessage.textContent = `You ran out of moves on Level ${currentLevel}. Better luck next time!`;
+            const target = currentLevelData.objectives.find(obj => obj.type === 'score')?.value || currentLevelData.targetScore || 0;
+            modalStats.innerHTML = `<p>Final Score: ${score.toLocaleString()}</p><p>Target Score: ${target.toLocaleString()}</p>`;
+            modalActionsContainer.innerHTML = ''; modalActionsContainer.appendChild(modalActionPrimary); modalActionsContainer.appendChild(modalActionSecondary); 
+            stripeChoiceContainer.classList.add('hidden');
+            modalActionPrimary.textContent = "Try Again"; modalActionPrimary.onclick = () => { closeModal(); startGame(currentLevel); };
+            modalActionSecondary.textContent = "Back to Levels"; modalActionSecondary.onclick = () => { closeModal(); showLevelSelectScreen(); }; openModal();
+        }
+        function showNotification(message, type = "info", duration = 3000) { 
+            notificationBar.textContent = message; notificationBar.classList.remove('bg-gray-800', 'bg-green-600', 'bg-red-600', 'bg-blue-600', 'bg-yellow-500');
+            if (type === "success") notificationBar.classList.add('bg-green-600'); else if (type === "error") notificationBar.classList.add('bg-red-600');
+            else if (type === "warn") notificationBar.classList.add('bg-yellow-500'); 
+            else if (type === "info") notificationBar.classList.add('bg-blue-600'); else notificationBar.classList.add('bg-gray-800');
+            notificationBar.style.transform = 'translateY(0)'; setTimeout(() => { notificationBar.style.transform = 'translateY(100%)'; }, duration);
+        }
+        function openModal() { modalElement.classList.add('open'); }
+        function closeModal() { modalElement.classList.remove('open'); stripeChoiceContainer.classList.add('hidden'); modalActionsContainer.classList.remove('hidden'); }
+        
+        async function loadPlayerProgressAndSettings() {
+            authStatusEl.textContent = 'Loading player data...';
+            let settingsData = { soundEnabled: true, currentItemThemeKey: 'fruits' };
+            let defaultBoosters = { extraMoves: 2, shuffle: 2, hammer: 1, stripedBrush: 1, startColorBomb: 1 }; 
+            let defaultGems = 20;
+            let defaultTutorials = {};
+            let today = new Date().toISOString().split('T')[0];
+
+            if (useLocalStorage) {
+                const localProgress = localStorage.getItem('candyCrushPro_progress_local');
+                const localSettings = localStorage.getItem('candyCrushPro_settings_local');
+                if (localProgress) { playerProgress = JSON.parse(localProgress); }
+                else { playerProgress = { boosters: { ...defaultBoosters }, gems: defaultGems, lastLoginDate: null, tutorialsShown: {...defaultTutorials} }; LEVELS.forEach(l => { playerProgress[`level_${l.level}`] = { highScore: 0, stars: 0, unlocked: l.level === 1, awardedThreeStarBonus: false }; }); }
+                if (localSettings) { settingsData = JSON.parse(localSettings); }
+                if (!playerProgress.boosters) playerProgress.boosters = { ...defaultBoosters };
+                if (playerProgress.gems === undefined) playerProgress.gems = defaultGems;
+                if (playerProgress.tutorialsShown === undefined) playerProgress.tutorialsShown = {...defaultTutorials};
+                if (playerProgress.boosters.hammer === undefined) playerProgress.boosters.hammer = defaultBoosters.hammer;
+                if (playerProgress.boosters.stripedBrush === undefined) playerProgress.boosters.stripedBrush = defaultBoosters.stripedBrush;
+                if (playerProgress.boosters.startColorBomb === undefined) playerProgress.boosters.startColorBomb = defaultBoosters.startColorBomb;
+                LEVELS.forEach(l => { if(!playerProgress[`level_${l.level}`]) playerProgress[`level_${l.level}`] = { highScore: 0, stars: 0, unlocked: l.level === 1, awardedThreeStarBonus: false };});
+
+
+                if (playerProgress.lastLoginDate !== today) {
+                    playerProgress.lastLoginDate = today;
+                    playerProgress.gems = (playerProgress.gems || 0) + 10; 
+                    const boosterKeys = Object.keys(playerProgress.boosters);
+                    const randomBoosterKey = boosterKeys[Math.floor(Math.random() * boosterKeys.length)];
+                    playerProgress.boosters[randomBoosterKey] = (playerProgress.boosters[randomBoosterKey] || 0) + 1;
+                    showNotification(`Daily Reward: 10 Gems & 1 ${randomBoosterKey.replace(/([A-Z])/g, ' $1').trim()} Booster!`, "success", 4000);
+                    savePlayerProgress(); 
+                }
+                authStatusEl.textContent = 'Data loaded (Local).';
+            } else { 
+                if (!userId || !db) { authStatusEl.textContent = 'Error: Firebase not ready for data load.'; return; }
+                const progressDocPath = `artifacts/${appId}/users/${userId}/candyCrushPro/progress`;
+                const settingsDocPath = `artifacts/${appId}/users/${userId}/candyCrushPro/settings`;
+                try {
+                    const [progressSnap, settingsSnap] = await Promise.all([getDoc(doc(db, progressDocPath)), getDoc(doc(db, settingsDocPath))]);
+                    if (progressSnap.exists()) { playerProgress = progressSnap.data(); }
+                    else { playerProgress = { boosters: { ...defaultBoosters }, gems: defaultGems, lastLoginDate: null, tutorialsShown: {...defaultTutorials} }; LEVELS.forEach(l => { playerProgress[`level_${l.level}`] = { highScore: 0, stars: 0, unlocked: l.level === 1, awardedThreeStarBonus: false }; }); }
+                    if (settingsSnap.exists()) { settingsData = { ...settingsData, ...settingsSnap.data() }; }
+                    if (!playerProgress.boosters) playerProgress.boosters = { ...defaultBoosters };
+                    if (playerProgress.gems === undefined) playerProgress.gems = defaultGems;
+                    if (playerProgress.tutorialsShown === undefined) playerProgress.tutorialsShown = {...defaultTutorials};
+                    if (playerProgress.boosters.hammer === undefined) playerProgress.boosters.hammer = defaultBoosters.hammer;
+                    if (playerProgress.boosters.stripedBrush === undefined) playerProgress.boosters.stripedBrush = defaultBoosters.stripedBrush;
+                    if (playerProgress.boosters.startColorBomb === undefined) playerProgress.boosters.startColorBomb = defaultBoosters.startColorBomb;
+                    LEVELS.forEach(l => { if(!playerProgress[`level_${l.level}`]) playerProgress[`level_${l.level}`] = { highScore: 0, stars: 0, unlocked: l.level === 1, awardedThreeStarBonus: false };});
+
+                     if (playerProgress.lastLoginDate !== today) {
+                        playerProgress.lastLoginDate = today;
+                        playerProgress.gems = (playerProgress.gems || 0) + 10;
+                        const boosterKeys = Object.keys(playerProgress.boosters);
+                        const randomBoosterKey = boosterKeys[Math.floor(Math.random() * boosterKeys.length)];
+                        playerProgress.boosters[randomBoosterKey] = (playerProgress.boosters[randomBoosterKey] || 0) + 1;
+                        showNotification(`Daily Reward: 10 Gems & 1 ${randomBoosterKey.replace(/([A-Z])/g, ' $1').trim()} Booster!`, "success", 4000);
+                        await savePlayerProgress(); 
+                    }
+                    authStatusEl.textContent = 'Data loaded (Firebase).';
+                } catch (error) {
+                    console.error("Firebase load error:", error);
+                    showNotification("Firebase load error. Using temporary local data.", "error"); authStatusEl.textContent = `Firebase Error: ${error.code}. Using temp local.`;
+                    playerProgress = { boosters: { ...defaultBoosters }, gems: defaultGems, lastLoginDate: null, tutorialsShown: {...defaultTutorials} }; LEVELS.forEach(l => { playerProgress[`level_${l.level}`] = { highScore: 0, stars: 0, unlocked: l.level === 1, awardedThreeStarBonus: false }; });
+                }
+            }
+            soundEnabled = settingsData.soundEnabled;
+            currentItemThemeKey = settingsData.currentItemThemeKey || 'fruits';
+            ITEM_TYPES = ALL_ITEM_THEMES[currentItemThemeKey];
+            itemThemeSelector.value = currentItemThemeKey;
+            updateSoundButtonUI(); updateBoosterDisplay(); updateGemsDisplay();
+        }
+        async function savePlayerProgress() {
+            if (useLocalStorage) { localStorage.setItem('candyCrushPro_progress_local', JSON.stringify(playerProgress)); }
+            else { if (!userId || !db) { console.warn("Attempted to save progress without Firebase connection."); return; } const docRef = doc(db, `artifacts/${appId}/users/${userId}/candyCrushPro/progress`); try { await setDoc(docRef, playerProgress, { merge: true }); } catch (error) { console.error("Error saving progress to Firebase:", error); showNotification("Error saving progress.", "error"); } }
+        }
+        async function savePlayerSettings() {
+            const settingsToSave = { soundEnabled, currentItemThemeKey };
+            if (useLocalStorage) { localStorage.setItem('candyCrushPro_settings_local', JSON.stringify(settingsToSave)); }
+            else { if (!userId || !db) { return; } const docRef = doc(db, `artifacts/${appId}/users/${userId}/candyCrushPro/settings`); try { await setDoc(docRef, settingsToSave, { merge: true }); } catch (error) { console.error("Error saving settings to Firebase:", error);} }
+        }
+        function updatePlayerProgress(level, currentScore, currentStars) { 
+            const levelKey = `level_${level}`; const currentBest = playerProgress[levelKey] || { highScore: 0, stars: 0, unlocked: false, awardedThreeStarBonus: false };
+            let updated = false; if (currentScore > currentBest.highScore) { currentBest.highScore = currentScore; updated = true; }
+            if (currentStars > currentBest.stars) { currentBest.stars = currentStars; updated = true; }
+            if (currentStars > 0 && level < MAX_LEVEL) { 
+                const nextLevelKey = `level_${level + 1}`; 
+                if (!playerProgress[nextLevelKey] || !playerProgress[nextLevelKey].unlocked) { 
+                    if (!playerProgress[nextLevelKey]) playerProgress[nextLevelKey] = { highScore: 0, stars: 0, unlocked: false, awardedThreeStarBonus: false }; 
+                    playerProgress[nextLevelKey].unlocked = true; updated = true; 
+                } 
+            }
+            if (currentStars === 3 && !currentBest.awardedThreeStarBonus) { currentBest.awardedThreeStarBonus = true; updated = true;}
+            playerProgress[levelKey] = currentBest; if (updated) { savePlayerProgress(); }
+        }
+        function updateSoundButtonUI() { soundIcon.className = `fas ${soundEnabled ? 'fa-volume-up' : 'fa-volume-mute'} mr-2`; soundText.textContent = soundEnabled ? 'Sound On' : 'Sound Off'; }
+        function showLevelSelectScreen() { levelSelectScreen.style.display = 'block'; gameInfoScreen.style.display = 'none'; gameBoardElement.innerHTML = ''; populateLevelSelectGrid(); clearHint(); updateBoosterDisplay(); updateGemsDisplay(); }
+        function showGameScreen() { levelSelectScreen.style.display = 'none'; gameInfoScreen.style.display = 'block'; updateBoosterDisplay(); updateGemsDisplay(); }
+        function populateLevelSelectGrid() { 
+            levelSelectGrid.innerHTML = '';
+            LEVELS.forEach(levelData => {
+                const button = document.createElement('button'); const levelKey = `level_${levelData.level}`;
+                const progress = (playerProgress && playerProgress[levelKey]) || { highScore: 0, stars: 0, unlocked: levelData.level === 1 };
+                button.classList.add('level-button', 'p-3', 'sm:p-4', 'rounded-lg', 'shadow-md', 'transition', 'duration-150', 'text-white', 'font-semibold', 'text-lg', 'sm:text-xl', 'flex', 'flex-col', 'items-center', 'justify-center');
+                if (progress.unlocked) { 
+                    button.classList.add('bg-pink-500', 'hover:bg-pink-600');
+                    button.innerHTML = `<span>${levelData.level}</span><div class="text-xs mt-1">${'<i class="fas fa-star text-yellow-300"></i>'.repeat(progress.stars)}${'<i class="far fa-star text-gray-300"></i>'.repeat(3 - progress.stars)}</div>`;
+                    if (progress.highScore > 0) { 
+                        const highScoreDisplay = document.createElement('div'); highScoreDisplay.className = 'text-xxs text-yellow-200 mt-0.5'; highScoreDisplay.textContent = `HS: ${progress.highScore.toLocaleString()}`;
+                        button.appendChild(highScoreDisplay);
+                    }
+                    button.onclick = () => { playSound('click'); startGame(levelData.level); };
+                } else { 
+                    button.classList.add('bg-gray-600', 'locked'); button.innerHTML = `<span>${levelData.level}</span><i class="fas fa-lock mt-1 text-sm"></i>`; button.disabled = true; 
+                }
+                levelSelectGrid.appendChild(button);
+            });
+        }
+        function findPossibleMoves() { 
+            const moves = [];
+            for (let r = 0; r < BOARD_SIZE; r++) { for (let c = 0; c < BOARD_SIZE - 1; c++) { if (canSwapAndMatch(r, c, r, c + 1)) moves.push({ r1: r, c1: c, r2: r, c2: c + 1 }); } }
+            for (let r = 0; r < BOARD_SIZE - 1; r++) { for (let c = 0; c < BOARD_SIZE; c++) { if (canSwapAndMatch(r, c, r + 1, c)) moves.push({ r1: r, c1: c, r2: r + 1, c2: c }); } }
+            return moves;
+        }
+        function canSwapAndMatch(r1, c1, r2, c2) { 
+            if (!board[r1] || !board[r1][c1] || !board[r2] || !board[r2][c2] || 
+                (boardChains[r1] && boardChains[r1][c1]>0) || (boardChains[r2] && boardChains[r2][c2]>0) || 
+                (boardChocolate[r1]?.[c1] && !board[r1][c1]) || (boardChocolate[r2]?.[c2] && !board[r2][c2]) || 
+                (boardLicorice[r1]?.[c1] && !board[r1][c1]) || (boardLicorice[r2]?.[c2] && !board[r2][c2]) || 
+                board[r1][c1].isIngredient || board[r2][c2].isIngredient) return false;
+            [board[r1][c1], board[r2][c2]] = [board[r2][c2], board[r1][c1]]; const matches = findMatches();
+            [board[r1][c1], board[r2][c2]] = [board[r2][c2], board[r1][c1]]; return matches.length > 0;
+        }
+        function checkForNoMovesAndHint() { 
+            clearTimeout(hintTimeout); clearHint(); if (isSwapping || isCascading || hammerBoosterActive || stripedBrushActive) return;
+            const possibleMoves = findPossibleMoves();
+            if (possibleMoves.length === 0 && !isCascading && movesLeft > 0) { 
+                showNotification("No more moves! Shuffling board...", "info", 2000); 
+                setTimeout(() => shuffleBoard(false, true), 500); 
+            }
+            else if (possibleMoves.length > 0) { 
+                hintTimeout = setTimeout(() => { showHint(possibleMoves[Math.floor(Math.random() * possibleMoves.length)]); }, 5000); 
+            }
+        }
+        function showHint(move) { 
+            if (!move) return; 
+            const cell1 = gameBoardElement.querySelector(`.game-item-cell[data-r="${move.r1}"][data-c="${move.c1}"] .game-item`); 
+            const cell2 = gameBoardElement.querySelector(`.game-item-cell[data-r="${move.r2}"][data-c="${move.c2}"] .game-item`);
+            if (cell1) cell1.classList.add('hint'); if (cell2) cell2.classList.add('hint');
+        }
+        function clearHint() { clearTimeout(hintTimeout); const hintedCells = gameBoardElement.querySelectorAll('.game-item.hint'); hintedCells.forEach(cell => cell.classList.remove('hint')); }
+        document.getElementById('hint-button').addEventListener('click', () => { 
+            playSound('click'); clearTimeout(hintTimeout); clearHint(); const possibleMoves = findPossibleMoves();
+            if (possibleMoves.length > 0) { showHint(possibleMoves[Math.floor(Math.random() * possibleMoves.length)]); hintTimeout = setTimeout(clearHint, 3000); }
+            else { showNotification("No moves available right now.", "info", 2000); }
+        });
+        async function shuffleBoard(isBooster = false, isAutomatic = false) { 
+            if (isSwapping || isCascading) return; 
+            isSwapping = true; 
+            if(isBooster) playSound('booster'); else playSound('swap', 'E3');
+            
+            const allItems = []; 
+            for (let r = 0; r < BOARD_SIZE; r++) { 
+                for (let c = 0; c < BOARD_SIZE; c++) { 
+                    if (board[r][c] && !board[r][c].isIngredient && !(boardChocolate[r]?.[c] > 0) && !(boardLicorice[r]?.[c] > 0)) { 
+                        allItems.push(board[r][c]); 
+                    }
+                } 
+            }
+            for (let i = allItems.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [allItems[i], allItems[j]] = [allItems[j], allItems[i]]; }
+            
+            let k = 0; 
+            for (let r = 0; r < BOARD_SIZE; r++) { 
+                for (let c = 0; c < BOARD_SIZE; c++) { 
+                    if (board[r][c] && !board[r][c].isIngredient && !(boardChocolate[r]?.[c] > 0) && !(boardLicorice[r]?.[c] > 0) && k < allItems.length) { 
+                        board[r][c] = allItems[k++]; board[r][c].isNew = true; 
+                    } 
+                } 
+            }
+            renderBoard(true); await new Promise(resolve => setTimeout(resolve, 500));
+            
+            const matchesAfterShuffle = findMatches(); 
+            if (matchesAfterShuffle.length > 0) { 
+                if (!isAutomatic) { movesLeft--; updateMovesDisplay(); } 
+                await processMatches(matchesAfterShuffle); 
+            } else { 
+                 if (findPossibleMoves().length === 0) { 
+                    showNotification("Still no moves! Re-shuffling...", "warn", 1500);
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                     createBoard(); renderBoard(true);
+                }
+            }
+            isSwapping = false; 
+            if (!isCascading) { 
+                await spreadChocolate();
+                checkForNoMovesAndHint();
+            }
+            if (movesLeft <= 0 && !checkWinCondition() && !isCascading) { checkGameEnd(); }
+        }
+        function createConfettiParticle() {
+            const particle = document.createElement('div'); particle.classList.add('confetti-particle');
+            const colors = ['#f9a8d4', '#f472b6', '#ec4899', '#db2777', '#a21caf', '#7e22ce', '#6d28d9', '#fde047', '#facc15', '#eab308'];
+            particle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            const size = Math.random() * 10 + 5; particle.style.width = `${size}px`; particle.style.height = `${size}px`;
+            particle.style.left = `${Math.random() * 100}vw`; particle.style.top = `-20px`;
+            const angle = Math.random() * 360; particle.style.transform = `rotate(${angle}deg)`;
+            document.body.appendChild(particle);
+            setTimeout(() => { particle.style.transform = `translateY(${window.innerHeight + 20}px) translateX(${Math.random() * 200 - 100}px) rotate(${angle + Math.random() * 720}deg)`; particle.style.opacity = '1'; }, 10);
+            setTimeout(() => { particle.remove(); }, 2000); 
+        }
+        function triggerConfetti(particleCount = 50, duration = 2000) { const interval = duration / particleCount; for (let i = 0; i < particleCount; i++) { setTimeout(createConfettiParticle, i * interval); } }
+        function triggerScreenShake(duration = 0.3) { document.body.classList.add('screen-shake'); setTimeout(() => document.body.classList.remove('screen-shake'), duration * 1000); }
+        
+        function updateBoosterDisplay() {
+            extraMovesCountDisplay.textContent = playerProgress.boosters?.extraMoves || 0;
+            shuffleBoosterCountDisplay.textContent = playerProgress.boosters?.shuffle || 0;
+            hammerBoosterCountDisplay.textContent = playerProgress.boosters?.hammer || 0;
+            stripedBrushCountDisplay.textContent = playerProgress.boosters?.stripedBrush || 0;
+            startColorBombCountDisplay.textContent = playerProgress.boosters?.startColorBomb || 0; // Update new booster display
+        }
+        function updateBoosterButtons() {
+            boosterExtraMovesButton.disabled = boostersUsedThisLevel.extraMoves || (playerProgress.boosters?.extraMoves || 0) === 0;
+            boosterShuffleButton.disabled = boostersUsedThisLevel.shuffle || (playerProgress.boosters?.shuffle || 0) === 0;
+            boosterHammerButton.disabled = boostersUsedThisLevel.hammer || (playerProgress.boosters?.hammer || 0) === 0 || hammerBoosterActive;
+            boosterStripedBrushButton.disabled = boostersUsedThisLevel.stripedBrush || (playerProgress.boosters?.stripedBrush || 0) === 0 || stripedBrushActive;
+            boosterStartColorBombButton.disabled = true; // Keep disabled for now as pre-game selection UI is not implemented
+        }
+        boosterExtraMovesButton.addEventListener('click', () => {
+            if (hammerBoosterActive || stripedBrushActive) return; 
+            if ((playerProgress.boosters?.extraMoves || 0) > 0 && !boostersUsedThisLevel.extraMoves) {
+                movesLeft += 3; playerProgress.boosters.extraMoves--; boostersUsedThisLevel.extraMoves = true;
+                updateMovesDisplay(); updateBoosterDisplay(); updateBoosterButtons(); savePlayerProgress();
+                showNotification("+3 Moves Added!", "success"); playSound('booster');
+            }
+        });
+        boosterShuffleButton.addEventListener('click', () => {
+            if (hammerBoosterActive || stripedBrushActive) return;
+            if ((playerProgress.boosters?.shuffle || 0) > 0 && !boostersUsedThisLevel.shuffle) {
+                playerProgress.boosters.shuffle--; boostersUsedThisLevel.shuffle = true;
+                updateBoosterDisplay(); updateBoosterButtons(); savePlayerProgress();
+                movesLeft--; updateMovesDisplay(); 
+                showNotification("Board Shuffled!", "info"); shuffleBoard(true); 
+            }
+        });
+        boosterHammerButton.addEventListener('click', () => {
+            if (stripedBrushActive) return; 
+            if ((playerProgress.boosters?.hammer || 0) > 0 && !boostersUsedThisLevel.hammer && !hammerBoosterActive) {
+                hammerBoosterActive = true; gameBoardElement.classList.add('hammer-active'); updateBoosterButtons();
+                showNotification("Lollipop Hammer: Click a candy/obstacle to remove!", "info", 3000); playSound('booster');
+            } else if (hammerBoosterActive) { 
+                hammerBoosterActive = false; gameBoardElement.classList.remove('hammer-active'); updateBoosterButtons();
+                showNotification("Hammer deactivated.", "info", 1500);
+            }
+        });
+        async function useLollipopHammer(r,c) {
+            if (!hammerBoosterActive) return;
+            
+            playerProgress.boosters.hammer--; boostersUsedThisLevel.hammer = true;
+            hammerBoosterActive = false; gameBoardElement.classList.remove('hammer-active');
+            updateBoosterDisplay(); updateBoosterButtons(); savePlayerProgress();
+            movesLeft--; updateMovesDisplay(); 
+            
+            let itemRemoved = false; let chocolateClearedByHammer = 0; let jellyClearedByHammer = 0; let licoriceClearedByHammer = 0;
+            if (boardChains[r] && boardChains[r][c] > 0) { boardChains[r][c] = 0; playSound('chainBreak'); const cellWrapper = gameBoardElement.querySelector(`.game-item-cell[data-r="${r}"][data-c="${c}"]`); if(cellWrapper) cellWrapper.classList.remove('chained'); itemRemoved = true; }
+            else if (boardLicorice[r] && boardLicorice[r][c] > 0) { boardLicorice[r][c] = 0; licoriceClearedByHammer++; score += 50; playSound('licoriceClear'); const cellWrapper = gameBoardElement.querySelector(`.game-item-cell[data-r="${r}"][data-c="${c}"]`); if(cellWrapper) cellWrapper.classList.remove('licorice-swirl-cell'); if(board[r][c]) { board[r][c] = null; } itemRemoved = true; }
+            else if (boardChocolate[r] && boardChocolate[r][c] > 0) { boardChocolate[r][c] = 0; chocolateClearedByHammer++; playSound('chocolateClear'); const cellWrapper = gameBoardElement.querySelector(`.game-item-cell[data-r="${r}"][data-c="${c}"]`); if(cellWrapper) cellWrapper.classList.remove('chocolate-layer'); if(board[r][c]) { board[r][c] = null; } itemRemoved = true; } 
+            else if (boardJelly[r] && boardJelly[r][c] > 0) { boardJelly[r][c] = 0; jellyClearedByHammer++; playSound('jellyClear'); if(board[r][c]) { board[r][c] = null; } itemRemoved = true; } 
+            else if (board[r] && board[r][c]) { 
+                const item = board[r][c];
+                if (item.isIngredient) { showNotification("Ingredients are too precious to hammer!", "warn", 2000); movesLeft++; updateMovesDisplay(); playerProgress.boosters.hammer++; boostersUsedThisLevel.hammer = false; updateBoosterDisplay(); updateBoosterButtons(); savePlayerProgress(); return; }
+                board[r][c] = null; itemRemoved = true; 
+            }
+            
+            if(itemRemoved) {
+                showNotification("Smashed!", "success", 1500); playSound('bigExplosion'); triggerScreenShake(0.2);
+                if (chocolateClearedByHammer > 0) updateObjectiveProgress('clearChocolate', { count: chocolateClearedByHammer });
+                if (jellyClearedByHammer > 0) updateObjectiveProgress('clearAllJelly', { count: jellyClearedByHammer });
+                if (licoriceClearedByHammer > 0) updateObjectiveProgress('clearLicorice', { count: licoriceClearedByHammer });
+                renderBoard(true); await new Promise(resolve => setTimeout(resolve, 100));
+                await dropAndFillItems();
+                const newMatches = findMatches();
+                if (newMatches.length > 0) { showNotification("Cascade!", "info", 1000); await processMatches(newMatches, true); }
+                else { await postMoveActions(); } 
+            } else {
+                 showNotification("Nothing to smash there!", "error");
+                 movesLeft++; updateMovesDisplay(); playerProgress.boosters.hammer++; boostersUsedThisLevel.hammer = false; updateBoosterDisplay(); updateBoosterButtons(); savePlayerProgress();
+            }
+        }
+
+        boosterStripedBrushButton.addEventListener('click', () => {
+            if (hammerBoosterActive) return; 
+            if ((playerProgress.boosters?.stripedBrush || 0) > 0 && !boostersUsedThisLevel.stripedBrush && !stripedBrushActive) {
+                stripedBrushActive = true; gameBoardElement.classList.add('striped-brush-active'); updateBoosterButtons();
+                showNotification("Striped Brush: Click a normal candy to paint stripes!", "info", 3000); playSound('booster');
+            } else if (stripedBrushActive) { 
+                stripedBrushActive = false; gameBoardElement.classList.remove('striped-brush-active'); updateBoosterButtons();
+                showNotification("Striped Brush deactivated.", "info", 1500);
+            }
+        });
+        function activateStripedBrush(r,c) {
+            if (!stripedBrushActive || !board[r] || !board[r][c] || board[r][c].isIngredient || board[r][c].special || 
+                (boardChocolate[r]?.[c] >0 ) || (boardLicorice[r]?.[c] >0 )) {
+                showNotification("Cannot use brush on this item or empty/blocked spot!", "error", 2000);
+                if(boardChocolate[r]?.[c] >0 || boardLicorice[r]?.[c] >0) showNotification("Clear blocker first!", "error", 2000);
+                return;
+            }
+            stripedBrushTarget = {r, c, item: board[r][c]};
+            gameBoardElement.classList.remove('striped-brush-active'); 
+
+            modalTitle.textContent = "Choose Stripe Direction";
+            const itemVisual = getItemVisuals(stripedBrushTarget.item).display;
+            modalMessage.textContent = `Paint ${itemVisual} with which stripe?`;
+            modalStats.innerHTML = ''; 
+            modalActionsContainer.classList.add('hidden'); 
+            stripeChoiceContainer.classList.remove('hidden'); 
+            openModal();
+        }
+        stripeChoiceHButton.onclick = () => { makeStriped(SPECIAL_ITEM_TYPES.STRIPED_H); };
+        stripeChoiceVButton.onclick = () => { makeStriped(SPECIAL_ITEM_TYPES.STRIPED_V); };
+        async function makeStriped(stripeType) {
+            if (!stripedBrushTarget) return;
+            closeModal(); 
+
+            playerProgress.boosters.stripedBrush--; boostersUsedThisLevel.stripedBrush = true;
+            stripedBrushActive = false; 
+            updateBoosterDisplay(); updateBoosterButtons(); savePlayerProgress();
+            movesLeft--; updateMovesDisplay(); 
+
+            const {r, c, item} = stripedBrushTarget;
+            board[r][c] = { typeId: item.typeId, special: stripeType, isNew: true, isIngredient: false };
+            showNotification("Candy Painted!", "success", 1500); playSound('specialCreate', 'B5');
+            renderBoard(true); await new Promise(resolve => setTimeout(resolve, 300));
+
+            const newMatches = findMatches();
+            if (newMatches.length > 0) {
+                await processMatches(newMatches, true); 
+            } else {
+                await postMoveActions(); 
+            }
+            stripedBrushTarget = null;
+        }
+
+        itemThemeSelector.addEventListener('change', (event) => {
+            currentItemThemeKey = event.target.value; ITEM_TYPES = ALL_ITEM_THEMES[currentItemThemeKey]; savePlayerSettings();
+            if (gameBoardElement.innerHTML !== '' && !gameInfoScreen.classList.contains('hidden')) { renderBoard(); updateObjectivesDisplay(); }
+        });
+        document.getElementById('restart-level-button').addEventListener('click', () => { playSound('click'); startGame(currentLevel); });
+        document.getElementById('back-to-levels-button').addEventListener('click', () => { playSound('click'); showLevelSelectScreen(); });
+        
+        const TUTORIALS = {
+            'welcome_level1': { title: "Welcome to Level 1!", message: "Swap two adjacent items to make a line of 3 or more of the same kind. Reach the target score to win!" },
+            'jelly_intro': { title: "Jelly Time!", message: "Some items are on jelly. Clear items on jelly squares to remove the jelly. Clear all jelly to pass some levels!" },
+            'wrapped_intro': { title: "Wrapped Candy!", message: "Matching 5 candies in an L or T shape creates a Wrapped Candy! Activating it clears a 3x3 area. Try making one!"},
+            'first_wrapped': { title: "Wrapped Candy Created!", message: "Nice! Swap your Wrapped Candy or include it in a match to see its explosive power!" },
+            'ingredients_chains_intro': { title: "Ingredients & Chains!", message: "Bring ingredients (like 🍒) to the bottom row to collect them. Chained items 🔗 can't be moved until the chain is broken by matching the chained item or using a special!" },
+            'colorbomb_intro': { title: "Color Bomb!", message: "Matching 5 candies in a row or column creates a Color Bomb! Swap it with any candy to clear all candies of that color." },
+            'first_color_bomb': { title: "Color Bomb Created!", message: "Wow, a Color Bomb! Swap it with an adjacent candy to clear all candies of that color." },
+            'first_striped': { title: "Striped Candy Created!", message: "You made a Striped Candy! Matching it will clear a whole row or column." },
+            'chocolate_intro': { title: "Watch out for Chocolate!", message: "Chocolate 🍫 will spread if you don't clear it! Match items next to chocolate or use specials to remove it. Spawners 🍫🏭 create more chocolate!" },
+            'licorice_intro': { title: "Licorice Swirls!", message: "Licorice Swirls 🌀 block your way and stop striped candy blasts! Clear them by matching adjacent candies or with explosions."}
+        };
+        function showTutorialIfNeeded(tutorialId) {
+            if (playerProgress.tutorialsShown[tutorialId]) return;
+            const tutorial = TUTORIALS[tutorialId];
+            if (tutorial) {
+                tutorialModalTitle.textContent = tutorial.title;
+                tutorialModalMessage.textContent = tutorial.message;
+                tutorialModalElement.classList.add('open');
+                playerProgress.tutorialsShown[tutorialId] = true;
+                savePlayerProgress(); 
+            }
+        }
+        tutorialModalCloseButton.addEventListener('click', () => {
+            tutorialModalElement.classList.remove('open');
+            if (!isSwapping && !isCascading && gameInfoScreen.style.display === 'block') {
+                 checkForNoMovesAndHint();
+            }
+        });
+
+        async function main() {
+            document.body.addEventListener('click', () => { if (Tone.context && Tone.context.state !== 'running') { Tone.start().catch(e => {console.warn("Tone.start auto-play failed", e)}); } }, { once: true });
+            setupSounds(); 
+            await initializeFirebase(); 
+        }
+        main();
+    </script>
+</body>
+</html>
