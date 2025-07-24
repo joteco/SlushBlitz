@@ -1,3 +1,7 @@
+
+![Uploading Screenshot 2025-07-16 at 13-56-36 SlushBlitz.png…]()
+
+
 SlushBlitz – The Ultimate Match-3 Puzzle Rush!
 
 Unleash a fruity frenzy in SlushBlitz, a vibrant, fast-paced match-3 puzzle game! Match colorful fruits, sweets, gems, or desserts across a glowing board full of strategic boosts and tricky obstacles. With dazzling combos, special items, and level-specific goals, SlushBlitz will test your puzzle skills in the sweetest way possible!
