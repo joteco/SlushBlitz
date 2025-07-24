@@ -1,5 +1,6 @@
 
-<img width="1920" height="947" alt="Screenshot 2025-07-16 at 13-38-24 Candy Crush Pro" src="https://github.com/user-attachments/assets/924a9bc9-6d71-4889-a035-14429babaae9" />
+
+<img width="1778" height="862" alt="Screenshot 2025-07-16 at 13-56-36 SlushBlitz" src="https://github.com/user-attachments/assets/7d87b143-8570-4e9a-ab7f-a692721a2979" />
 
 
 
